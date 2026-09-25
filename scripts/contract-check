@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+root=$(pwd)
+name="sintonizados-contract-$$"
+trap 'podman rm -f "$name" >/dev/null 2>&1 || true' EXIT INT TERM
+podman run -d --name "$name" -e OPERATOR_TOKEN=contract-test -e PROVIDER_MODE=demo localhost/sintonizados:dev >/dev/null
+podman run --rm --network "container:$name" -v "$root:/workspace:ro,Z" docker.io/library/python:3.13-slim sh -ec 'pip install --quiet --disable-pip-version-check --root-user-action=ignore jsonschema==4.23.0; python /workspace/scripts/check-contract.py'

@@ -1,0 +1,30 @@
+name: verify
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Podman baseline
+        run: podman --version
+      - name: Smithy validation
+        run: ./scripts/dev smithy-validate
+      - name: Generate and validate OpenAPI
+        run: ./scripts/dev openapi
+      - name: Generated contract is current
+        run: test -z "$(git status --porcelain -- api/generated/openapi)"
+      - name: Go tests with race detector
+        run: ./scripts/dev test
+      - name: Go lint
+        run: ./scripts/dev lint
+      - name: Concurrent HTTP smoke
+        run: ./scripts/dev smoke
+      - name: OCI build and runtime contract checks
+        run: ./scripts/dev contract
+      - name: Whitespace
+        run: git diff --check

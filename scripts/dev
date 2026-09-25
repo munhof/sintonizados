@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+root=$(pwd)
+go_image=docker.io/library/golang:1.26.1-bookworm
+smithy_image=localhost/sintonizados-smithy:1.73.0
+go_tool() {
+  podman run --rm --userns=keep-id -e HOME=/tmp -e GOPATH=/tmp/go -e GOCACHE=/tmp/go-build -e GOMODCACHE=/go/pkg/mod -v sintonizados-go-build:/tmp/go-build -v sintonizados-go-mod:/go/pkg/mod -v "$root:/workspace:Z" -w /workspace "$go_image" "$@"
+}
+smithy_tool() {
+  podman build -t "$smithy_image" -f containers/Smithy.Containerfile .
+  podman run --rm --userns=keep-id -e HOME=/tmp -v "$root:/workspace:Z" "$smithy_image" "$@"
+}
+command=${1:-help}
+[ "$#" -eq 0 ] || shift
+case "$command" in
+  build) go_tool go build -o build/server ./cmd/server; go_tool go build -o build/feed ./cmd/feed ;;
+  test) go_tool go test -race -count=1 ./... "$@" ;;
+  lint) go_tool sh -ec 'test -z "$(gofmt -l cmd internal)"; go vet ./...' ;;
+  fmt) go_tool go fmt ./... ;;
+  tidy) go_tool go mod tidy ;;
+  run) podman build -t localhost/sintonizados:dev .; exec podman run --rm --name sintonizados -p 127.0.0.1:8080:8080 --env-file "${ENV_FILE:-.env.example}" localhost/sintonizados:dev ;;
+  container) podman build -t localhost/sintonizados:dev . ;;
+  feed) exec podman run --rm --network host --env-file "${ENV_FILE:-.env.example}" -v "$root:/data:ro,Z" --entrypoint /feed localhost/sintonizados:dev "$@" ;;
+  contract) "$0" container; exec ./scripts/contract-check ;;
+  smoke) go_tool go run ./cmd/smoke "$@" ;;
+  smithy-validate) smithy_tool validate ;;
+  smithy-build) smithy_tool build; mkdir -p api/generated/openapi; cp api/build/smithy/source/openapi/Sintonizados.openapi.json api/generated/openapi/sintonizados.openapi.json ;;
+  openapi) "$0" smithy-build; podman run --rm -v "$root:/workspace:ro,Z" docker.io/library/python:3.13-slim sh -ec 'pip install --quiet --disable-pip-version-check openapi-spec-validator==0.7.2; python -m openapi_spec_validator /workspace/api/generated/openapi/sintonizados.openapi.json' ;;
+  docs) printf '%s\n' 'Contexto: docs/project-context.md' 'Arquitectura: docs/architecture/overview.md' 'Contrato: api/smithy/ + api/README.md'; "$0" openapi ;;
+  gcloud) exec podman run --rm -it -v sintonizados-gcloud:/root/.config/gcloud -v "$root:/workspace:Z" -w /workspace gcr.io/google.com/cloudsdktool/google-cloud-cli:stable gcloud "$@" ;;
+  *) printf '%s\n' 'Usage: ./scripts/dev {build|test|lint|fmt|tidy|run|container|contract|feed|smoke|smithy-validate|smithy-build|openapi|docs|gcloud}' ;;
+esac

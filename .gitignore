@@ -30,3 +30,36 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Sintonizados local outputs and tool state
+/build/
+/dist/
+/api/build/
+/.local-audio/
+/coverage/
+.env.*
+!.env.example
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*.log
+/tmp/
+/.cache/
+/.config/gcloud/
+.gcloud/
+credentials/
+*credentials*.json
+*service-account*.json
+*.pem
+*.key
+/models/
+/checkpoints/
+/huggingface/
+*.safetensors
+*.gguf
+*.ckpt
+*.pt
+*.pth

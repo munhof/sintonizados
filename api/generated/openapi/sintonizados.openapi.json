@@ -1,0 +1,1010 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Sintonizados",
+        "version": "0.1.0",
+        "description": "Sintonizados conference accessibility gateway. See api/README.md for SSE and PCM semantics."
+    },
+    "paths": {
+        "/": {
+            "get": {
+                "operationId": "Home",
+                "responses": {
+                    "200": {
+                        "description": "Home 200 response",
+                        "content": {
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HomeOutputPayload"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/api/sessions": {
+            "get": {
+                "operationId": "ListSessions",
+                "responses": {
+                    "200": {
+                        "description": "ListSessions 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListSessionsResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            },
+            "post": {
+                "operationId": "CreateSession",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateSessionRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "CreateSession 201 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CreateSessionResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "BadRequest 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BadRequestResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict 409 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConflictResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Busy 429 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BusyResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Unavailable 503 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnavailableResponseContent"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sessions/{session_id}": {
+            "get": {
+                "operationId": "GetSession",
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-zA-Z0-9_-]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GetSession 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GetSessionResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFound 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/api/sessions/{session_id}/audio": {
+            "post": {
+                "description": "Ordered PCM16 little-endian mono 16 kHz chunks, 2..32000 bytes, even length.\nSequence starts at 1. Retries of an accepted sequence return 409; never replay silently.",
+                "operationId": "IngestAudio",
+                "requestBody": {
+                    "content": {
+                        "application/octet-stream": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IngestAudioInputPayload"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-zA-Z0-9_-]+$"
+                        },
+                        "required": true
+                    },
+                    {
+                        "name": "X-Audio-Sequence",
+                        "in": "header",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "format": "int64"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "IngestAudio 202 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IngestAudioResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "BadRequest 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BadRequestResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFound 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict 409 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConflictResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "TooLarge 413 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TooLargeResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Busy 429 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BusyResponseContent"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sessions/{session_id}/end": {
+            "post": {
+                "operationId": "EndSession",
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-zA-Z0-9_-]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "EndSession 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/EndSessionResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFound 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict 409 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConflictResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Unavailable 503 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnavailableResponseContent"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sessions/{session_id}/events": {
+            "get": {
+                "description": "SSE event 'subtitle', JSON Subtitle payload, id is session-local sequence.\nReplays retained last 200 subtitles; Last-Event-ID resumes. Heartbeats every 15 s.\nSee api/README.md for reset events, retention, reconnect and partial transcript semantics.",
+                "operationId": "StreamSubtitles",
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-zA-Z0-9_-]+$"
+                        },
+                        "required": true
+                    },
+                    {
+                        "name": "Last-Event-ID",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "StreamSubtitles 200 response",
+                        "content": {
+                            "text/event-stream": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StreamSubtitlesOutputPayload"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "BadRequest 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BadRequestResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFound 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/api/sessions/{session_id}/subtitles": {
+            "get": {
+                "operationId": "GetSubtitles",
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-zA-Z0-9_-]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GetSubtitles 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GetSubtitlesResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFound 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/health": {
+            "get": {
+                "operationId": "Health",
+                "responses": {
+                    "200": {
+                        "description": "Health 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HealthResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/metrics": {
+            "get": {
+                "operationId": "Metrics",
+                "responses": {
+                    "200": {
+                        "description": "Metrics 200 response",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MetricsOutputPayload"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedResponseContent"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/talks/{session_id}": {
+            "get": {
+                "operationId": "TalkPage",
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-zA-Z0-9_-]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "TalkPage 200 response",
+                        "content": {
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TalkPageOutputPayload"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFound 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "BadRequestResponseContent": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            },
+            "BusyResponseContent": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            },
+            "ConflictResponseContent": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            },
+            "CreateSessionRequestContent": {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "minLength": 1
+                    },
+                    "language": {
+                        "$ref": "#/components/schemas/Language"
+                    }
+                },
+                "required": [
+                    "language",
+                    "session_id",
+                    "title"
+                ]
+            },
+            "CreateSessionResponseContent": {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "minLength": 1
+                    },
+                    "language": {
+                        "$ref": "#/components/schemas/Language"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/SessionStatus"
+                    },
+                    "transcription_status": {
+                        "$ref": "#/components/schemas/TranscriptionStatus"
+                    },
+                    "mode": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "subtitle_count": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "language",
+                    "mode",
+                    "session_id",
+                    "status",
+                    "subtitle_count",
+                    "title",
+                    "transcription_status"
+                ]
+            },
+            "EndSessionResponseContent": {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "minLength": 1
+                    },
+                    "language": {
+                        "$ref": "#/components/schemas/Language"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/SessionStatus"
+                    },
+                    "transcription_status": {
+                        "$ref": "#/components/schemas/TranscriptionStatus"
+                    },
+                    "mode": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "subtitle_count": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "language",
+                    "mode",
+                    "session_id",
+                    "status",
+                    "subtitle_count",
+                    "title",
+                    "transcription_status"
+                ]
+            },
+            "GetSessionResponseContent": {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "minLength": 1
+                    },
+                    "language": {
+                        "$ref": "#/components/schemas/Language"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/SessionStatus"
+                    },
+                    "transcription_status": {
+                        "$ref": "#/components/schemas/TranscriptionStatus"
+                    },
+                    "mode": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "subtitle_count": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "language",
+                    "mode",
+                    "session_id",
+                    "status",
+                    "subtitle_count",
+                    "title",
+                    "transcription_status"
+                ]
+            },
+            "GetSubtitlesResponseContent": {
+                "type": "object",
+                "properties": {
+                    "subtitles": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Subtitle"
+                        }
+                    }
+                },
+                "required": [
+                    "subtitles"
+                ]
+            },
+            "HealthResponseContent": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    },
+                    "mode": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "mode",
+                    "status"
+                ]
+            },
+            "HomeOutputPayload": {
+                "type": "string"
+            },
+            "IngestAudioInputPayload": {
+                "type": "string",
+                "maxLength": 32000,
+                "minLength": 2,
+                "contentEncoding": "byte"
+            },
+            "IngestAudioResponseContent": {
+                "type": "object",
+                "properties": {
+                    "sequence": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "format": "int64"
+                    }
+                },
+                "required": [
+                    "sequence"
+                ]
+            },
+            "Language": {
+                "type": "string",
+                "enum": [
+                    "en"
+                ]
+            },
+            "ListSessionsResponseContent": {
+                "type": "object",
+                "properties": {
+                    "sessions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Session"
+                        }
+                    }
+                },
+                "required": [
+                    "sessions"
+                ]
+            },
+            "MetricsOutputPayload": {
+                "type": "string"
+            },
+            "NotFoundResponseContent": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            },
+            "Session": {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "minLength": 1
+                    },
+                    "language": {
+                        "$ref": "#/components/schemas/Language"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/SessionStatus"
+                    },
+                    "transcription_status": {
+                        "$ref": "#/components/schemas/TranscriptionStatus"
+                    },
+                    "mode": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "subtitle_count": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "language",
+                    "mode",
+                    "session_id",
+                    "status",
+                    "subtitle_count",
+                    "title",
+                    "transcription_status"
+                ]
+            },
+            "SessionStatus": {
+                "type": "string",
+                "enum": [
+                    "active",
+                    "ended",
+                    "failed"
+                ]
+            },
+            "StreamSubtitlesOutputPayload": {
+                "type": "string",
+                "contentEncoding": "byte"
+            },
+            "Subtitle": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "session_id": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "correlation_id": {
+                        "type": "string"
+                    },
+                    "original": {
+                        "type": "string"
+                    },
+                    "spanish": {
+                        "type": "string"
+                    },
+                    "final": {
+                        "type": "boolean"
+                    },
+                    "audio_ingress_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "transcript_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "translation_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "published_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "transcription_ms": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "translation_ms": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "end_to_end_ms": {
+                        "type": "number",
+                        "format": "double"
+                    }
+                },
+                "required": [
+                    "audio_ingress_at",
+                    "correlation_id",
+                    "end_to_end_ms",
+                    "final",
+                    "id",
+                    "original",
+                    "published_at",
+                    "session_id",
+                    "spanish",
+                    "transcript_at",
+                    "transcription_ms",
+                    "translation_at",
+                    "translation_ms"
+                ]
+            },
+            "TalkPageOutputPayload": {
+                "type": "string"
+            },
+            "TooLargeResponseContent": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            },
+            "TranscriptionStatus": {
+                "type": "string",
+                "enum": [
+                    "waiting",
+                    "streaming",
+                    "complete",
+                    "error"
+                ]
+            },
+            "UnauthorizedResponseContent": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            },
+            "UnavailableResponseContent": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            }
+        },
+        "securitySchemes": {
+            "smithy.api.httpBearerAuth": {
+                "type": "http",
+                "description": "HTTP Bearer authentication",
+                "scheme": "Bearer"
+            }
+        }
+    },
+    "security": [
+        {
+            "smithy.api.httpBearerAuth": []
+        }
+    ]
+}
