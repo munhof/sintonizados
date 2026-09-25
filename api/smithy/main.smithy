@@ -9,7 +9,7 @@ use smithy.api#httpBearerAuth
 @httpBearerAuth
 service Sintonizados {
     version: "0.1.0"
-    operations: [Health, ListSessions, GetSession, CreateSession, EndSession, IngestAudio, GetSubtitles, StreamSubtitles, Metrics, Home, TalkPage]
+    operations: [Health, ListSessions, GetSession, CreateSession, EndSession, IngestAudio, GetSubtitles, StreamSubtitles, Metrics, Home, OperatorPage, TalkPage, OBSOverlay, GetAsset]
 }
 
 @readonly
@@ -29,8 +29,28 @@ structure HealthOutput {
 operation Home { output: HTMLResponse }
 @readonly
 @auth([])
+@http(method: "GET", uri: "/operator", code: 200)
+operation OperatorPage { output: HTMLResponse }
+@readonly
+@auth([])
 @http(method: "GET", uri: "/talks/{session_id}", code: 200)
 operation TalkPage { input: SessionInput, output: HTMLResponse, errors: [NotFound] }
+@readonly
+@auth([])
+@http(method: "GET", uri: "/obs/{session_id}", code: 200)
+operation OBSOverlay { input: SessionInput, output: HTMLResponse, errors: [NotFound] }
+@readonly
+@auth([])
+@http(method: "GET", uri: "/assets/{name}", code: 200)
+operation GetAsset { input: AssetInput, output: JavaScriptResponse, errors: [NotFound] }
+structure AssetInput { @required @httpLabel name: AssetName }
+enum AssetName {
+    OPERATOR_JS = "operator.js"
+    MIC_WORKLET_JS = "mic-worklet.js"
+}
+@mediaType("text/javascript")
+string JavaScript
+structure JavaScriptResponse { @required @httpPayload body: JavaScript }
 @mediaType("text/html")
 string HTML
 structure HTMLResponse { @required @httpPayload body: HTML }

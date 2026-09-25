@@ -439,6 +439,44 @@
                 "security": []
             }
         },
+        "/assets/{name}": {
+            "get": {
+                "operationId": "GetAsset",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "path",
+                        "schema": {
+                            "$ref": "#/components/schemas/AssetName"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GetAsset 200 response",
+                        "content": {
+                            "text/javascript": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GetAssetOutputPayload"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFound 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
         "/health": {
             "get": {
                 "operationId": "Health",
@@ -482,6 +520,65 @@
                         }
                     }
                 }
+            }
+        },
+        "/obs/{session_id}": {
+            "get": {
+                "operationId": "OBSOverlay",
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-zA-Z0-9_-]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OBSOverlay 200 response",
+                        "content": {
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OBSOverlayOutputPayload"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFound 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/operator": {
+            "get": {
+                "operationId": "OperatorPage",
+                "responses": {
+                    "200": {
+                        "description": "OperatorPage 200 response",
+                        "content": {
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OperatorPageOutputPayload"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
             }
         },
         "/talks/{session_id}": {
@@ -528,6 +625,13 @@
     },
     "components": {
         "schemas": {
+            "AssetName": {
+                "type": "string",
+                "enum": [
+                    "operator.js",
+                    "mic-worklet.js"
+                ]
+            },
             "BadRequestResponseContent": {
                 "type": "object",
                 "properties": {
@@ -683,6 +787,9 @@
                     "transcription_status"
                 ]
             },
+            "GetAssetOutputPayload": {
+                "type": "string"
+            },
             "GetSessionResponseContent": {
                 "type": "object",
                 "properties": {
@@ -816,6 +923,12 @@
                 "required": [
                     "message"
                 ]
+            },
+            "OBSOverlayOutputPayload": {
+                "type": "string"
+            },
+            "OperatorPageOutputPayload": {
+                "type": "string"
             },
             "Session": {
                 "type": "object",

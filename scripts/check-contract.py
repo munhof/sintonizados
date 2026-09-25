@@ -47,6 +47,9 @@ else:
 
 auth = {'Authorization': 'Bearer contract-test', 'Content-Type': 'application/json'}
 check('GET', '/')
+check('GET', '/operator')
+check('GET', '/assets/operator.js', '/assets/{name}')
+check('GET', '/assets/mic-worklet.js', '/assets/{name}')
 check('POST', '/api/sessions', body=b'{}', expected=401, headers={'Content-Type': 'application/json'})
 for sid in ('contract-a', 'contract-b'):
     check('POST', '/api/sessions', body=json.dumps({'session_id': sid, 'title': sid, 'language': 'en'}).encode(), headers=auth, expected=201)
@@ -64,6 +67,7 @@ for sid in ('contract-a', 'contract-b'):
     detail = check('GET', f'/api/sessions/{sid}', '/api/sessions/{session_id}')
     assert detail['status'] == 'ended' and detail['subtitle_count'] == 10
     check('GET', f'/talks/{sid}', '/talks/{session_id}')
+    check('GET', f'/obs/{sid}', '/obs/{session_id}')
     result = check('GET', f'/api/sessions/{sid}/subtitles', '/api/sessions/{session_id}/subtitles')
     assert len(result['subtitles']) == 10
     assert all(sub['session_id'] == sid for sub in result['subtitles'])

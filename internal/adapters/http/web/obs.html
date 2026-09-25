@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subtítulos — {{.Title}}</title>
+<style>
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;background:transparent;color:#fff;font:700 2.2vw/1.25 system-ui,sans-serif}
+body{display:flex;align-items:flex-end;justify-content:center;padding:0 4% 6%}
+#captions{width:min(100%,1500px);padding:1rem 1.4rem;border-radius:.7rem;background:rgba(8,10,22,.86);text-align:center;text-shadow:0 2px 3px #000;box-shadow:0 2px 20px #0008}
+p{margin:.25rem 0;min-height:1.25em;overflow-wrap:anywhere}
+label{display:block;margin-bottom:.1rem;color:#d7d9ff;font-size:.5em;letter-spacing:.08em;text-transform:uppercase}
+#original{font-size:.82em;font-weight:500;color:#e0e2ef}
+#partial{font-size:.7em;font-weight:500;color:#d5d8ed;opacity:.78}
+#connection{position:fixed;right:.5rem;top:.5rem;margin:0;font:12px system-ui,sans-serif;color:#fff9}
+</style>
+<main id="overlay" data-events-url="/api/sessions/{{.ID}}/events" aria-live="polite">
+  <section id="captions">
+    <p id="original"><label>Original</label><span></span></p>
+    <p id="spanish"><label>Español</label><span></span></p>
+    <p id="partial"></p>
+  </section>
+  <p id="connection">Conectando…</p>
+</main>
+<script>
+const overlay=document.querySelector('#overlay');
+const original=document.querySelector('#original span');
+const spanish=document.querySelector('#spanish span');
+const partial=document.querySelector('#partial');
+const connection=document.querySelector('#connection');
+const stream=new EventSource(overlay.dataset.eventsUrl);
+stream.onopen=()=>{connection.textContent='En vivo'};
+stream.onerror=()=>{connection.textContent='Reconectando…'};
+stream.addEventListener('reset',()=>{original.textContent='';spanish.textContent='';partial.textContent=''});
+stream.addEventListener('partial',event=>{partial.textContent=JSON.parse(event.data).text});
+stream.addEventListener('subtitle',event=>{
+  const subtitle=JSON.parse(event.data);
+  original.textContent=subtitle.original;
+  spanish.textContent=subtitle.spanish;
+  partial.textContent='';
+  connection.textContent='En vivo · '+(subtitle.end_to_end_ms/1000).toFixed(2)+' s';
+});
+stream.addEventListener('session',event=>{
+  const session=JSON.parse(event.data);
+  connection.textContent=session.status==='failed'?'Transcripción interrumpida':'Charla finalizada';
+  stream.close();
+});
+</script>
+</html>

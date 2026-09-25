@@ -4,6 +4,9 @@
 
 - [x] Go, sesiones aisladas y pipeline por eventos.
 - [x] Emisor PCM progresivo y dos fuentes simultáneas.
+- [x] Captura en vivo del micrófono en navegador y conector OBS RTMP local
+  (MediaMTX + FFmpeg OCI) con overlay transparente para Browser Source. Aceptación
+  con la instalación OBS del usuario y audio/proveedores reales pendiente.
 - [x] Proveedores Gemini Live/Google Translation detrás de puertos.
 - [x] UI lista/detalle, originales, español y SSE con replay acotado.
 - [x] Timestamps, latencia, logs y métricas por sesión.
@@ -40,7 +43,7 @@ evolución se siguen en los issues enlazados abajo; no equivalen a funcionalidad
 4. Store y bus distribuidos con ownership, leases, idempotencia y publicación durable:
    [issue #7](https://github.com/munhof/sintonizados/issues/7). Afinidad opcional,
    nunca requisito de consistencia.
-5. Fuentes en vivo de escenario/micrófono (OBS/RTMP/HLS): [issue #8](https://github.com/munhof/sintonizados/issues/8).
+5. Fuente HLS y opciones de emisión/ingestión remota: [issue #8](https://github.com/munhof/sintonizados/issues/8).
    Idiomas adicionales y exportación SRT/VTT: [issue #9](https://github.com/munhof/sintonizados/issues/9).
 6. Retención, privacidad, límites de carga y pruebas operativas: [issue #10](https://github.com/munhof/sintonizados/issues/10).
 

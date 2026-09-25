@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-//go:embed web/*.html
+//go:embed web/*
 var assets embed.FS
 var pages = template.Must(template.ParseFS(assets, "web/*.html"))
 
@@ -190,6 +190,25 @@ func New(s *application.Service, token string) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		pages.ExecuteTemplate(w, "home.html", map[string]any{"Sessions": s.Store.List(), "Mode": s.Mode})
 	})
+	mux.HandleFunc("GET /operator", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		pages.ExecuteTemplate(w, "operator.html", map[string]any{"Mode": s.Mode})
+	})
+	mux.HandleFunc("GET /assets/{name}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if name != "operator.js" && name != "mic-worklet.js" {
+			http.NotFound(w, r)
+			return
+		}
+		body, err := assets.ReadFile("web/" + name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write(body)
+	})
 	mux.HandleFunc("GET /talks/{session_id}", func(w http.ResponseWriter, r *http.Request) {
 		v, err := s.Snapshot(r.PathValue("session_id"))
 		if err != nil {
@@ -199,10 +218,20 @@ func New(s *application.Service, token string) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		pages.ExecuteTemplate(w, "talk.html", v.Session)
 	})
+	mux.HandleFunc("GET /obs/{session_id}", func(w http.ResponseWriter, r *http.Request) {
+		v, err := s.Snapshot(r.PathValue("session_id"))
+		if err != nil {
+			failure(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		pages.ExecuteTemplate(w, "obs.html", v.Session)
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
 		mux.ServeHTTP(w, r)
 	})
 }

@@ -61,6 +61,77 @@ func TestHTTPContractAndAuthorization(t *testing.T) {
 		t.Fatal(v)
 	}
 }
+
+func TestOperatorPageExposesLiveMicrophoneCapture(t *testing.T) {
+	_, server := fixture(t)
+	r, err := http.Get(server.URL + "/operator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Body.Close()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("operator page: got %d, want %d: %s", r.StatusCode, http.StatusOK, body)
+	}
+	if !strings.Contains(string(body), "/assets/operator.js") {
+		t.Fatalf("operator page does not load the microphone client")
+	}
+
+	r, err = http.Get(server.URL + "/assets/operator.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Body.Close()
+	client, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.StatusCode != http.StatusOK || !strings.Contains(string(client), "navigator.mediaDevices.getUserMedia") || !strings.Contains(string(client), "X-Audio-Sequence") {
+		t.Fatalf("microphone client: got HTTP %d with %q", r.StatusCode, client)
+	}
+
+	r, err = http.Get(server.URL + "/assets/mic-worklet.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Body.Close()
+	worklet, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.StatusCode != http.StatusOK || !strings.Contains(string(worklet), "registerProcessor") || !strings.Contains(string(worklet), "16000") {
+		t.Fatalf("microphone worklet: got HTTP %d with %q", r.StatusCode, worklet)
+	}
+}
+
+func TestOBSOverlayProvidesTransparentLiveSubtitles(t *testing.T) {
+	s, server := fixture(t)
+	if _, err := s.Create(context.Background(), "charla-obs", "Charla OBS", "en"); err != nil {
+		t.Fatal(err)
+	}
+	r, err := http.Get(server.URL + "/obs/charla-obs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Body.Close()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(body)
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("OBS overlay: got %d, want %d: %s", r.StatusCode, http.StatusOK, page)
+	}
+	for _, expected := range []string{"background:transparent", "/api/sessions/charla-obs/events", "Original", "Español"} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("OBS overlay missing %q", expected)
+		}
+	}
+}
+
 func TestSSEReplayAndSessionIsolation(t *testing.T) {
 	s, server := fixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

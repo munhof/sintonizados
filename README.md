@@ -28,6 +28,10 @@ de significado. La incorporación adaptativa de razonamiento todavía es futura.
 - Sesiones independientes, ingestión PCM ordenada, cierre y errores visibles.
 - Go HTTP, páginas HTML y JavaScript mínimo, originales parciales y subtítulos
   finales en inglés y español por SSE; reconexión con historial acotado.
+- Captura en vivo desde el navegador y conector de audio OBS por RTMP. El segundo
+  usa MediaMTX y FFmpeg en contenedores; `/obs/{session_id}` sirve un overlay
+  transparente para agregar como Browser Source en una escena OBS. La recepción
+  está implementada; falta validar el flujo con OBS instalado en la máquina de demo.
 - Adaptadores Gemini Live y Google Translation Basic; pruebas de protocolo con
   servidores locales. **No comprobados con credenciales reales todavía**.
 - Modo `demo` con frases programadas: prueba el transporte y la concurrencia,
@@ -79,6 +83,33 @@ wait "$pid_b"
 
 `/data` es el repositorio montado en el emisor. Los archivos deben ser **PCM s16le,
 mono, 16 kHz, sin encabezado WAV**. Ver [audio y operación local](docs/operations/local.md).
+
+### OBS en vivo
+
+Con OBS instalado, iniciá el receptor local y configurá OBS en **Settings → Stream**:
+
+```sh
+./scripts/dev obs-start
+```
+
+- Service: `Custom...`
+- Server: `rtmp://127.0.0.1:1935/live`
+- Stream Key: el ID estable, por ejemplo `charla-a`
+
+Iniciá **Start Streaming** en OBS y, con el mismo ID, conectá el audio al gateway:
+
+```sh
+ENV_FILE=.env ./scripts/dev obs-feed -session charla-a -title 'Charla A'
+```
+
+El comando crea la sesión, convierte el audio publicado por OBS a PCM de 16 kHz y
+lo envía mientras esté activa la fuente. Agregá a la escena una **Browser Source**
+con `http://127.0.0.1:8080/obs/charla-a`; ese overlay muestra original y español
+con fondo transparente, por lo que queda visible en la grabación de OBS. Para
+transcripción real, el servidor debe correr con `PROVIDER_MODE=google`; en modo
+demo los subtítulos siguen siendo frases programadas. Detené la transmisión de OBS
+o usá Ctrl-C en `obs-feed` para cerrar la sesión. Más detalles en
+[operación local](docs/operations/local.md).
 
 ## Desarrollo y contrato
 
@@ -132,8 +163,8 @@ remoto verificado**.
 - Laya pre-routing y output gating.
 - Gemma para enriquecimiento contextual fuera del camino crítico.
 - SessionStore distribuido, EventBus distribuido, leases y deduplicación durable.
-- Integración OBS/RTMP/HLS y micrófono.
-- Más idiomas, exportación SRT/VTT y renovación de conexiones de IA.
+- HLS como fuente adicional, más idiomas, exportación SRT/VTT y renovación de
+  conexiones de IA.
 
 El [plan MVP](docs/planning/mvp.md) distingue pruebas locales de aceptación real
 con Google. Instrucciones para colaboradores y agentes: [AGENTS.md](AGENTS.md).

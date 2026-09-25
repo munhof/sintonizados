@@ -15,7 +15,8 @@ serialización; no introduce infraestructura AWS.
 ```
 
 Toda operación del modelo tiene implementación HTTP: health, lista, crear, detalle
-(incluye estado), cerrar, audio, history, SSE, métricas y ambas páginas HTML.
+(incluye estado), cerrar, audio, history, SSE, métricas y páginas HTML de inicio,
+operación, charla y overlay OBS.
 Los errores son JSON `{ "message": "..." }`, con X-Amzn-Errortype para el protocolo.
 Las rutas de lectura son públicas. Crear/audio/cierre/métricas requieren
 `Authorization: Bearer <OPERATOR_TOKEN>`. Una clave Google no autentica esta API.
@@ -49,6 +50,13 @@ historial completo, exactly-once ni garantía tras reinicio. Snapshots cada 200 
 los observadores lentos no frenan transcripción. Se limita cada escritura a 5 s.
 OpenAPI representa el stream como body opaco; estos eventos no son operaciones HTTP
 independientes. WebSocket sólo se usa hacia Gemini, no como endpoint público.
+
+## OBS Browser Source
+
+GET `/obs/{session_id}` devuelve una página HTML transparente que se puede agregar
+como Browser Source a una escena OBS. Consume los eventos `partial`, `subtitle` y
+`session` del SSE de esa sesión. La publicación RTMP hacia MediaMTX y la extracción
+FFmpeg viven en el feeder `cmd/obsfeed`, no son operaciones de la API Go.
 
 ## Validación y documentación
 

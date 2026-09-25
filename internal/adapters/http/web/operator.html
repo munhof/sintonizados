@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operar micrófono — Sintonizados</title>
+<style>
+body{font:18px system-ui;background:#101326;color:#edf0ff;max-width:900px;margin:auto;padding:1.5rem}
+a{color:#c3c6ff}main,section{background:#1d2240;border:1px solid #62689f;border-radius:14px;padding:1.25rem;margin:1rem 0}
+form{display:grid;gap:1rem;max-width:36rem}label{display:grid;gap:.4rem}input,button{font:inherit;padding:.7rem;border-radius:8px;border:1px solid #8990c4}
+input{background:#101326;color:#edf0ff}button{cursor:pointer;background:#777ce0;color:#101326;font-weight:700}button:disabled{cursor:not-allowed;opacity:.55}
+.badge{color:#ffd685}#status{min-height:2rem}#viewer{display:inline-block;margin:.75rem 0}
+</style>
+<main data-mode="{{.Mode}}">
+<a href="/">← Charlas</a>
+<h1>Transmitir desde el micrófono</h1>
+{{if eq .Mode "demo"}}<p class="badge">Modo demo: el micrófono se captura y se envía, pero los textos son programados; no representan reconocimiento de voz.</p>{{else}}<p>Modo Google: el audio se transcribe y traduce con los proveedores configurados.</p>{{end}}
+<p>Permití el acceso al micrófono cuando el navegador lo solicite. En localhost funciona con HTTP; desde otro dispositivo necesitás HTTPS. Usá auriculares para evitar que el micrófono capte los subtítulos reproducidos.</p>
+<form id="session-form">
+  <label for="session-id">ID de sesión
+    <input id="session-id" name="session_id" required maxlength="64" pattern="[A-Za-z0-9_-]+" autocomplete="off">
+  </label>
+  <label for="title">Nombre de la charla
+    <input id="title" name="title" required maxlength="200" value="Prueba de micrófono">
+  </label>
+  <label for="operator-token">Token de operador
+    <input id="operator-token" name="operator_token" type="password" required autocomplete="off">
+  </label>
+  <button id="create" type="submit">Crear sesión</button>
+</form>
+<section id="controls" hidden>
+  <h2 id="session-heading">Sesión</h2>
+  <a id="viewer" target="_blank" rel="noopener">Abrir subtítulos en otra pestaña</a>
+  <div>
+    <button id="start" type="button">Iniciar micrófono</button>
+    <button id="stop" type="button" disabled>Detener micrófono y cerrar charla</button>
+  </div>
+</section>
+<p id="status" role="status" aria-live="polite">Primero creá una sesión.</p>
+</main>
+<script src="/assets/operator.js" defer></script>
+</html>

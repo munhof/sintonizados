@@ -3,6 +3,9 @@
 ```mermaid
 flowchart TB
   Feed[Fuente PCM / cmd/feed] --> HTTP[Go HTTP adapter]
+  OBS[OBS Studio / RTMP] --> MTX[MediaMTX OCI]
+  MTX --> FF[FFmpeg + obs-feed OCI]
+  FF --> HTTP
   HTTP --> App[Application / Processing Gateway]
   App --> Store[SessionStore / memoria]
   App --> T[Transcriber / Gemini Live]
@@ -13,6 +16,7 @@ flowchart TB
   Translator --> Post[DecisionEngine.After]
   Post --> History[Historial / subtítulos / latencia]
   History --> SSE[SSE / audiencia]
+  SSE --> Overlay[Browser Source transparente / OBS]
   Model[Smithy 2.0] --> OpenAPI[OpenAPI 3.1 generado]
   Model -. contrato externo .-> HTTP
   Gemma[Gemma futuro] -. enriquecimiento .-> Store

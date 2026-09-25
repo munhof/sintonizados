@@ -11,11 +11,14 @@ puertos independientes de proveedores y Smithy; `internal/application` coordina;
 `internal/adapters` implementa memoria, Google, demo y HTTP. El frontend mínimo
 se sirve embebido desde Go. Contrato público: Smithy 2.0; OpenAPI 3.1 derivado.
 
-Implementado: ingestión PCM, dos sesiones concurrentes, SSE con replay acotado,
-MemorySessionStore/MemoryEventBus, adapters Google y demo, métricas, CI OCI.
+Implementado: ingestión PCM, captura desde browser, conector OBS/RTMP con MediaMTX
+y FFmpeg OCI, overlay transparente para OBS, dos sesiones concurrentes, SSE con
+replay acotado, MemorySessionStore/MemoryEventBus, adapters Google y demo, métricas,
+CI OCI.
 Las pruebas de Google usan dobles locales; no afirmar validación real sin evidencia.
 NO implementado: Laya, Gemma, stores/buses distribuidos, routing multimodelo,
-afinidad como solución de consistencia, renovación automática Live, OBS, SRT/VTT.
+afinidad como solución de consistencia, renovación automática Live, recepción HLS,
+SRT/VTT.
 
 ## Minimal Change Engineering
 
@@ -31,6 +34,8 @@ No instalar toolchains en el host. Baseline: git + Podman + shell.
 `./scripts/dev test` ejecuta Go con detector de carreras; `lint` verifica formato
 más vet; `smoke` prueba dos fuentes; `contract` compara respuestas reales con el
 contrato. `run` inicia la demo, `feed` envía archivos PCM o audio demo.
+`obs-start|obs-stop|obs-status` opera MediaMTX y `obs-feed` conecta una publicación
+RTMP de OBS con una sesión Go y su Browser Source de subtítulos.
 No guardar secretos ni registrar audio/texto completo en logs. No confundir demo
 con IA real. No agregar infraestructura distribuida o framework frontend sin motivo.
 
@@ -39,6 +44,10 @@ con IA real. No agregar infraestructura distribuida o framework frontend sin mot
 Antes de modificar un endpoint público, revisar y modificar primero el modelo
 Smithy correspondiente. No agregar silenciosamente endpoints fuera del modelo.
 Una operación modelada no debe documentarse como implementada hasta existir en Go.
+Antes de agregar o cambiar una página HTTP pública (por ejemplo `/operator`,
+`/talks/{session_id}` o `/obs/{session_id}`), actualizar primero su operación
+Smithy y regenerar OpenAPI. Las URLs de transporte entrante de OBS no son endpoints
+Go; documentar su protocolo en `docs/operations/local.md`.
 
 1. Modificar `api/smithy/*.smithy`.
 2. Ejecutar `./scripts/dev smithy-validate`.

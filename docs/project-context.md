@@ -13,6 +13,13 @@ frases fijas y no prueba reconocimiento, traducción ni precisión. La aceptaci�
 real requiere dos grabaciones habladas, acceso a Gemini y Cloud Translation y
 una medición de calidad/latencia. El repositorio deja ambas rutas preparadas.
 
+Las entradas en vivo incluyen micrófono de navegador y OBS local. OBS publica RTMP
+a MediaMTX OCI; `obs-feed` usa FFmpeg para convertir la pista de audio a PCM y
+enviarla al gateway. `/obs/{session_id}` es una Browser Source transparente para
+componer originales y traducción en una escena/grabación OBS. La ruta está
+implementada en el repositorio; la aceptación en la máquina del usuario con OBS y
+proveedores Google debe comprobarse antes de afirmar que la demo real funciona.
+
 La evolución apunta a transferencia de significado y conocimiento contextual,
 no sólo sustitución de cadenas. Hoy se retienen 20 transcripts recientes por sesión.
 Los contratos reservan glosarios, entidades y metadatos; Google Translation Basic
