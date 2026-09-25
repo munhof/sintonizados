@@ -32,6 +32,27 @@ func TestTranslationUsesStructuredRequestAndDecodesEntities(t *testing.T) {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
+
+func TestTranslationSupportsSpanishToEnglish(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var v map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+			t.Error(err)
+			return
+		}
+		if v["source"] != "es" || v["target"] != "en" {
+			t.Errorf("expected Spanish-to-English request, got %v", v)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":{"translations":[{"translatedText":"Hello"}]}}`))
+	}))
+	defer server.Close()
+	got, err := (Translator{Endpoint: server.URL, Client: server.Client()}).Translate(context.Background(), domain.TranslationRequest{Text: "Hola", Source: "es", Target: "en"})
+	if err != nil || got.Text != "Hello" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
 func TestGeminiStreamsPCMAndWaitsForFinal(t *testing.T) {
 	up := websocket.Upgrader{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -40,6 +40,7 @@ type Subtitle struct {
 	SessionID           string    `json:"session_id"`
 	CorrelationID       string    `json:"correlation_id"`
 	Original            string    `json:"original"`
+	English             string    `json:"english"`
 	Spanish             string    `json:"spanish"`
 	Final               bool      `json:"final"`
 	AudioIngressAt      time.Time `json:"audio_ingress_at"`

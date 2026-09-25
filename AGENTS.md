@@ -1,7 +1,7 @@
 # Sintonizados — instrucciones canónicas
 
 Sintonizados ofrece accesibilidad en conferencias mediante audio, transcripción,
-traducción inglés → español y subtítulos por charla. Leé primero
+traducción entre inglés y español y subtítulos por charla. Leé primero
 `docs/project-context.md`, `README.md` y `docs/planning/mvp.md`.
 
 ## Arquitectura y estado
@@ -15,7 +15,8 @@ Implementado: ingestión PCM, captura desde browser, conector OBS/RTMP con Media
 y FFmpeg OCI, overlay transparente para OBS, dos sesiones concurrentes, SSE con
 replay acotado, MemorySessionStore/MemoryEventBus, adapters Google y demo, métricas,
 CI OCI. Laya Multilingual oficial en servicio OCI separado, DecisionEngine.Decide
-y metadatos por fragmento; mixed con división simple y fallback explícito.
+y metadatos por fragmento; traducción bidireccional es/en, mixed con división
+simple y fallback explícito.
 Ver docs/operations/laya.md y ADR 0019 antes de cambiar decisiones de idioma.
 Las pruebas de Google usan dobles locales; no afirmar validación real sin evidencia.
 NO implementado: routing/output gate adaptativo de Laya, Gemma, stores/buses distribuidos, routing multimodelo,

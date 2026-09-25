@@ -213,8 +213,8 @@ func (s *Service) classify(ctx context.Context, segment domain.TranscriptSegment
 		decision.Fallback = "decision_unavailable_source_autodetect"
 		slog.Warn("decision_fallback", "session_id", segment.SessionID, "segment_id", segment.ID)
 	}
-	// Policy is explicit: Spanish is preserved; other classes need translation.
-	decision.RequiresTranslation = decision.Language != "es"
+	// Both supported languages get a translation in the other language.
+	decision.RequiresTranslation = true
 	if decision.Language == "mixed" {
 		decision.Fallback = "mixed_source_autodetect"
 	}
@@ -251,37 +251,69 @@ func (s *Service) publishSegment(ctx context.Context, sid string, t domain.Trans
 	segment.Language = decision.Language
 	segment.LanguageConfidence = decision.LanguageConfidence
 	segment.RequiresTranslation = decision.RequiresTranslation
-	source := ""
-	if segment.Language == "en" {
-		source = "en"
+	english, spanish := "", ""
+	req := domain.TranslationRequest{Text: segment.Text, Target: "es", Knowledge: k}
+	switch segment.Language {
+	case "es":
+		spanish = segment.Text
+		req.Source, req.Target = "es", "en"
+	case "en":
+		english = segment.Text
+		req.Source, req.Target = "en", "es"
+	default:
+		// Mixed/unknown text uses provider autodetection and falls back to Spanish.
+		english = segment.Text
 	}
-	req := domain.TranslationRequest{Text: segment.Text, Source: source, Target: "es", Knowledge: k}
 	start := time.Now()
-	result := domain.Translation{Text: segment.Text, Provider: "passthrough"}
+	var result domain.Translation
 	if decision.RequiresTranslation {
-		s.emit(ctx, sid, t.CorrelationID, domain.TranslationRequested, req)
-		callctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		defer cancel()
+		translate := func(request domain.TranslationRequest) (domain.Translation, error) {
+			s.emit(ctx, sid, t.CorrelationID, domain.TranslationRequested, request)
+			callctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			translation, err := s.translator.Translate(callctx, request)
+			if err == nil {
+				s.emit(ctx, sid, t.CorrelationID, domain.TranslationProduced, translation)
+			}
+			return translation, err
+		}
 		var err error
-		result, err = s.translator.Translate(callctx, req)
+		result, err = translate(req)
 		if err != nil {
 			return err
 		}
-		s.emit(ctx, sid, t.CorrelationID, domain.TranslationProduced, result)
+		if segment.Language == "es" {
+			english = result.Text
+		} else if segment.Language == "en" {
+			spanish = result.Text
+		} else {
+			spanish = result.Text
+		}
+		if (segment.Language == "unknown" || segment.Language == "mixed") && result.DetectedSourceLanguage == "es" {
+			// The autodetected result is Spanish; preserve it and request its English counterpart.
+			spanish = segment.Text
+			second := domain.TranslationRequest{Text: segment.Text, Source: "es", Target: "en", Knowledge: k}
+			englishResult, err := translate(second)
+			if err != nil {
+				return err
+			}
+			english = englishResult.Text
+			if segment.Language == "unknown" {
+				decision.Language = "es"
+				decision.Fallback = "google_detected_es"
+				segment.Language = "es"
+			}
+		} else if segment.Language == "unknown" && result.DetectedSourceLanguage == "en" {
+			decision.Language = "en"
+			decision.Fallback = "google_detected_en"
+			segment.Language = "en"
+			english = segment.Text
+		}
 	}
 	translated := time.Now().UTC()
-	if decision.Language == "unknown" && result.DetectedSourceLanguage == "es" {
-		// Translation Basic reports source detection when source is omitted. Preserve Spanish verbatim.
-		decision.Language = "es"
-		decision.RequiresTranslation = false
-		decision.Fallback = "google_detected_es"
-		segment.Language = "es"
-		segment.RequiresTranslation = false
-		result.Text = segment.Text
-	}
 	slog.Info("segment_decided", "session_id", sid, "segment_id", segment.ID, "language", decision.Language, "language_confidence", decision.LanguageConfidence, "decision_provider", decision.Provider, "fallback", decision.Fallback)
 	now := time.Now().UTC()
-	sub := domain.Subtitle{SegmentID: segment.ID, ParentSegmentID: segment.ParentID, Language: segment.Language, LanguageConfidence: segment.LanguageConfidence, RequiresTranslation: segment.RequiresTranslation, DecisionProvider: decision.Provider, DecisionFallback: decision.Fallback, SessionID: sid, CorrelationID: t.CorrelationID, Original: t.Text, Spanish: result.Text, Final: true, AudioIngressAt: t.IngressAt, TranscriptAt: t.At, TranslationAt: translated, PublishedAt: now, TranscriptionMS: float64(t.At.Sub(t.IngressAt).Microseconds()) / 1000, TranslationMS: float64(translated.Sub(start).Microseconds()) / 1000, EndToEndMS: float64(now.Sub(t.IngressAt).Microseconds()) / 1000}
+	sub := domain.Subtitle{SegmentID: segment.ID, ParentSegmentID: segment.ParentID, Language: segment.Language, LanguageConfidence: segment.LanguageConfidence, RequiresTranslation: segment.RequiresTranslation, DecisionProvider: decision.Provider, DecisionFallback: decision.Fallback, SessionID: sid, CorrelationID: t.CorrelationID, Original: t.Text, English: english, Spanish: spanish, Final: true, AudioIngressAt: t.IngressAt, TranscriptAt: t.At, TranslationAt: translated, PublishedAt: now, TranscriptionMS: float64(t.At.Sub(t.IngressAt).Microseconds()) / 1000, TranslationMS: float64(translated.Sub(start).Microseconds()) / 1000, EndToEndMS: float64(now.Sub(t.IngressAt).Microseconds()) / 1000}
 	s.Store.Update(sid, func(x *domain.Snapshot) {
 		x.Session.SubtitleCount++
 		sub.ID = x.Session.SubtitleCount

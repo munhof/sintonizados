@@ -8,7 +8,7 @@
   (MediaMTX + FFmpeg OCI) con overlay transparente para Browser Source. Aceptación
   con la instalación OBS del usuario y audio/proveedores reales pendiente.
 - [x] Proveedores Gemini Live/Google Translation detrás de puertos.
-- [x] UI lista/detalle, originales, español y SSE con replay acotado.
+- [x] UI lista/detalle, original, inglés y español por SSE con replay acotado.
 - [x] Timestamps, latencia, logs y métricas por sesión.
 - [x] Smithy 2.0 → OpenAPI 3.1.0 versionado; validador independiente.
 - [x] Scripts OCI, Containerfile, CI y ADRs.

@@ -1,8 +1,8 @@
 # Contexto del producto
 
 Sintonizados nace para la Vibeathon de Nerdearla 2026. Quiere que una audiencia
-pueda seguir charlas en inglés con originales y subtítulos en español. Varias
-charlas ocurren simultáneamente y cada una tiene contexto propio.
+pueda seguir charlas en inglés y español con texto original y subtítulos en el
+otro idioma. Varias charlas ocurren simultáneamente y cada una tiene contexto propio.
 
 El nombre une radio, conexión con una charla y Sintonía. El proyecto es abierto,
 reproducible y orientado a sesiones. La demo mínima necesita dos fuentes de audio,

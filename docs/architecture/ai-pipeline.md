@@ -18,16 +18,20 @@ audioStreamEnd y drena hasta 10 s; timeout final se registra sin fallar la sesi�
 Ver motivos y timestamps de cierre en [runtime](runtime.md). Debe validarse acceso y comportamiento real con la cuenta de la demo.
 
 `TranslationRequest` lleva texto, idiomas y `SessionKnowledge`. La implementación
-Basic envía texto plano inglés → español (o source omitido para autodetección en fallback) y decodifica entidades HTML de la respuesta;
+Basic envía texto plano en el sentido requerido por fragmento: español → inglés,
+inglés → español, o source omitido a español para autodetección en fallback. Si
+Google detecta español en ese fallback, se conserva el original y se solicita
+también su traducción al inglés. Decodifica entidades HTML de la respuesta;
 los campos semánticos quedan disponibles para adaptadores futuros, sin afirmar que
 Basic los use. Contrato externo del proveedor: [Cloud Translation v2](https://docs.cloud.google.com/translate/docs/reference/rest/v2/translate).
 La clave se envía en [X-Goog-Api-Key](https://docs.cloud.google.com/docs/authentication/api-keys-use).
 
 `DecisionEngine.Decide` clasifica cada final mediante Laya oficial, modelo
-multilingual forzado, con límite de 5 s. Español se conserva; inglés se traduce;
+multilingual forzado, con límite de 5 s. Español e inglés se conservan en su
+columna y se traducen al otro idioma;
 mixed se divide por puntuación una vez (hasta ocho partes), se reclasifica y se
-mantiene el orden. Mixed residual/unknown usa autodetección de Google; si el proveedor detecta español,
-se conserva el original. Si Laya falla,
+mantiene el orden. Mixed residual/unknown usa autodetección de Google; si detecta
+español se conserva el original y se solicita la traducción inglesa. Si Laya falla,
 la decisión determinista devuelve unknown; logs y subtítulos registran el fallback.
 No hay clasificación por sesión. Gemini usa languageCodes=[] para detección automática.
 Probabilidad y proveedor pertenecen a cada TranscriptSegment, persistidos en Subtitle.

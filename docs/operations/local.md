@@ -3,7 +3,7 @@
 1. `./scripts/dev run` construye y ejecuta con `.env.example`.
 2. Abrir `http://localhost:8080`.
 3. Ejecutar los dos comandos `feed -demo` del README y visitar ambas charlas.
-4. Revisar originales/español, latencia y estado final.
+4. Revisar original, inglés, español, latencia y estado final.
 5. Detener con Ctrl-C. IDs y resultados desaparecen con el proceso.
 
 Comprobaciones: `./scripts/dev test`, `lint`, `smoke`, `openapi`, `contract`.
@@ -14,8 +14,13 @@ compatibilidad comprobada con Podman Machine en macOS/Windows.
 
 ## Audio real
 
-Copiar `.env.example` a `.env`; cambiar modo y claves. Usar un archivo de voz con
-permiso de uso. El emisor no envía encabezados WAV ni interpreta MP3: requiere raw
+Copiar `.env.example` a `.env`; configurar `PROVIDER_MODE=google`,
+`DECISION_ENGINE=deterministic` y las claves de Gemini y Cloud Translation. En
+este modo Google autodetecta el idioma de cada fragmento: los segmentos en inglés
+se traducen al español; los que detecta en español se conservan y se traducen al
+inglés. Para
+probar Laya, cambiar a `DECISION_ENGINE=laya` y consultar su [calidad medida](laya.md#calidad-medida-en-este-equipo).
+Usar un archivo de voz con permiso de uso. El emisor no envía encabezados WAV ni interpreta MP3: requiere raw
 PCM s16le, un canal, 16000 Hz. Convertir con FFmpeg en un contenedor:
 
 ```sh
@@ -23,7 +28,7 @@ mkdir -p .local-audio
 podman build -f containers/Audio.Containerfile -t localhost/sintonizados-audio:dev .
 podman run --rm --userns=keep-id -v "$PWD:/data:Z" localhost/sintonizados-audio:dev \
   -i /data/.local-audio/talk.wav -ac 1 -ar 16000 -f s16le /data/.local-audio/talk.pcm
-ENV_FILE=.env ./scripts/dev feed -session talk-1 -title 'Talk 1' \
+env ENV_FILE=.env ./scripts/dev feed -session talk-1 -title 'Talk 1' \
   -file /data/.local-audio/talk.pcm
 ```
 
@@ -57,7 +62,7 @@ usa FFmpeg para convertir la pista de audio a PCM16 mono 16 kHz y llamar al endp
 de ingestión ya existente. El gateway sigue siendo Go; el receptor y el conversor
 son procesos OCI reemplazables.
 
-1. Arrancá el gateway con `ENV_FILE=.env ./scripts/dev run` y el receptor con
+1. Arrancá el gateway con `env ENV_FILE=.env ./scripts/dev run` y el receptor con
    `./scripts/dev obs-start`.
 2. En OBS, **Settings → Stream → Service: Custom...**. Usá Server
    `rtmp://127.0.0.1:1935/live` y como Stream Key el `session_id` (sólo letras,
@@ -65,13 +70,13 @@ son procesos OCI reemplazables.
 3. En otra terminal, iniciá el feeder con ese ID y el mismo archivo de entorno:
 
    ```sh
-   ENV_FILE=.env ./scripts/dev obs-feed -session charla-a -title 'Charla A'
+   env ENV_FILE=.env ./scripts/dev obs-feed -session charla-a -title 'Charla A'
    ```
 
 4. En OBS, agregá una **Browser Source** con
    `http://127.0.0.1:8080/obs/charla-a`. Usá el tamaño del canvas (por ejemplo
-   1920 × 1080). La fuente tiene fondo transparente y presenta el original, la
-   traducción y la hipótesis parcial. Al grabar esa escena, OBS compone los
+1920 × 1080). La fuente tiene fondo transparente y presenta el original, inglés,
+español y la hipótesis parcial. Al grabar esa escena, OBS compone los
    subtítulos junto con cámara/presentación. El Browser Source debe estar activo
    en la escena durante la grabación.
 5. Para terminar, detené **Start Streaming** o usá Ctrl-C en `obs-feed`; el feeder

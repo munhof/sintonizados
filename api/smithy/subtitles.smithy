@@ -27,6 +27,7 @@ structure Subtitle {
     @required session_id: SessionID
     @required correlation_id: String
     @required original: String
+    @required english: String
     @required spanish: String
     @required final: Boolean
     @required audio_ingress_at: Instant

@@ -76,6 +76,9 @@ clientes anteriores; no se usa como source global. Cada Subtitle lleva segment_i
 parent_segment_id opcional (subdivisión), language (`es/en/mixed/unknown`),
 language_confidence (probabilidad elegida, 0 si no disponible), requires_translation,
 decision_provider y decision_fallback opcional. SSE y consulta de historial
-comparten el mismo schema. Español se conserva. Mixed residual/unknown usa
-source autodetect del traductor; no se garantiza resolver todo el code-switching.
+comparten el mismo schema. Los subtítulos contienen `original`, `english` y
+`spanish`: para es/en el texto se conserva en su columna y Google Translation
+completa la otra. Mixed residual/unknown usa source autodetect; si Google detecta
+español, se solicita también inglés. No se garantiza resolver code-switching
+dentro de un fragmento.
 El servicio privado Laya usa su API upstream; no añade endpoints al backend público.

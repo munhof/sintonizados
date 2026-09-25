@@ -14,7 +14,8 @@ flowchart TB
   Worker --> Pre[DecisionEngine.Decide / idioma por fragmento]
   Pre --> Translator[Translator / Google Translation]
   Translator --> History[Historial / subtítulos / latencia]
-  Pre -->|es: conservar| History
+  Pre -->|es/en: traducir al otro idioma| Translator
+  Pre -->|mixed/unknown: autodetectar| Translator
   History --> SSE[SSE / audiencia]
   SSE --> Overlay[Browser Source transparente / OBS]
   Model[Smithy 2.0] --> OpenAPI[OpenAPI 3.1 generado]

@@ -20,14 +20,16 @@ explícitamente en cada solicitud. Go consume HTTP detrás de `DecisionEngine.De
 La etapa `classify` recibe TranscriptSegment y contexto; clasifica es/en/mixed/unknown.
 `language_confidence` conserva la probabilidad de la opción elegida de Laya, no
 su campo `confidence` basado en entropía. No se afirma calibración en conferencias.
-`requires_translation` se deriva de la política es=conservar, resto=traducir;
+`requires_translation` es true para es, en, mixed y unknown: las salidas soportadas
+se muestran en inglés y español, conservando el original en su columna;
 las preguntas `noul` son opcionales y no se solicitan en este MVP.
 
-Español se publica idéntico. Inglés usa Google con source=en. Mixed se divide
+Español usa Google con es→en; inglés usa Google con en→es. Mixed se divide
 una vez por puntuación (máximo ocho partes) y cada parte se reclasifica; nunca se
 adivinan límites lingüísticos internos. Mixed residual/unknown omiten source para
 usar autodetección de Google y registran fallback. Si Google informa que un segmento
-unknown es español, se conserva el texto original y el metadato refleja `es`. El ejemplo sin puntuación
+unknown es español, se conserva en español y se solicita su traducción inglesa;
+el metadato refleja `es`. El ejemplo sin puntuación
 entre español e inglés puede seguir siendo mixed: no es segmentación semántica.
 
 Errores/timeout de Laya usan DeterministicDecisionEngine (unknown, sin confianza
@@ -48,8 +50,8 @@ Gemini recibe languageCodes=[] para no sesgar el reconocimiento a inglés.
 Servicio y caché de pesos adicionales; descarga inicial y costo CPU. Laya comparte
 un worker de inferencia: hay que medir capacidad antes de aumentar sesiones.
 Timeout de decisión 5 s por solicitud y fallback; una subdivisión puede requerir
-hasta ocho decisiones extra. Un mixed residual puede conservar inglés si la
-autodetección de Google escoge español. Queda explícito, sin prometer cobertura total.
+hasta ocho decisiones extra. La autodetección para mixed/unknown puede no resolver
+code-switching dentro de un fragmento. Queda explícito, sin prometer cobertura total.
 Los pesos los descarga el upstream de su bundle público Hugging Face; ver operación
 para reproducibilidad, caché y evidencia. No se guarda texto/audio en logs propios.
 

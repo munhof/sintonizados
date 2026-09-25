@@ -1048,6 +1048,9 @@
                     "original": {
                         "type": "string"
                     },
+                    "english": {
+                        "type": "string"
+                    },
                     "spanish": {
                         "type": "string"
                     },
@@ -1088,6 +1091,7 @@
                     "correlation_id",
                     "decision_provider",
                     "end_to_end_ms",
+                    "english",
                     "final",
                     "id",
                     "language",

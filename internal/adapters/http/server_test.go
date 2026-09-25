@@ -127,9 +127,23 @@ func TestOBSOverlayProvidesTransparentLiveSubtitles(t *testing.T) {
 	if r.StatusCode != http.StatusOK {
 		t.Fatalf("OBS overlay: got %d, want %d: %s", r.StatusCode, http.StatusOK, page)
 	}
-	for _, expected := range []string{"background:transparent", "/api/sessions/charla-obs/events", "Original", "Español"} {
+	for _, expected := range []string{"background:transparent", "/api/sessions/charla-obs/events", "Original", "English", "Español", "subtitle.english"} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("OBS overlay missing %q", expected)
+		}
+	}
+	talk, err := http.Get(server.URL + "/talks/charla-obs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer talk.Body.Close()
+	viewer, err := io.ReadAll(talk.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"English", `id="english"`, "s.english"} {
+		if !strings.Contains(string(viewer), expected) {
+			t.Errorf("talk viewer missing %q", expected)
 		}
 	}
 }
