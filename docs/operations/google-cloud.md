@@ -67,6 +67,11 @@ Bootstrap no rota versiones existentes.
 | `sintonizados-laya@PROJECT.iam.gserviceaccount.com` | Laya | Secret Accessor únicamente en `sintonizados-laya-api-key` |
 | `sintonizados-deployer@PROJECT.iam.gserviceaccount.com` | GitHub Actions | Run Admin y Service Usage Consumer en el proyecto; Artifact Registry Writer sólo en `sintonizados`; Service Account User sobre las dos identidades runtime; Run Invoker sobre Laya para su health check |
 
+El bootstrap también da al operador local autenticado `roles/iam.serviceAccountOpenIdTokenCreator`
+sobre el deployer (salvo que el operador ya sea esa misma service account). Esto
+permite generar un ID token corto sólo para la llamada local al health check
+privado de Laya; GitHub Actions usa la salida ID token de `google-github-actions/auth`.
+
 El workflow no tiene Owner ni Editor. No se crean ni descargan claves JSON.
 `sintonizados-laya` no recibe credenciales de Gemini ni Translation. El acceso
 Laya de runtime se restringe además mediante Cloud Run IAM.
@@ -127,9 +132,10 @@ disponible desde `main` y consulta que CI haya pasado para ese mismo SHA. El job
 usa GitHub Environment `production`, GitHub OIDC y `google-github-actions/auth`;
 no necesita key JSON.
 
-La misma lógica de despliegue está en `scripts/cloud`, que se usa tanto desde
-terminal (gcloud OCI autenticado) como desde Actions (gcloud del runner autenticado
-por WIF):
+La lógica de build, push, deploy, smoke y rollback está en `scripts/cloud`, y se
+usa desde terminal (gcloud OCI autenticado) y desde Actions (gcloud del runner
+autenticado por WIF). CD separa los pasos para pedir después del deploy de Laya un
+ID token cuyo audience sea la URL real del servicio:
 
 ```sh
 ./scripts/cloud build all
@@ -138,9 +144,23 @@ por WIF):
 ./scripts/cloud status
 ```
 
-`deploy all` publica los dos tags, despliega Laya, espera que Cloud Run esté Ready
-y que su `/health` autenticado reporte `multilingual`, y después despliega y prueba
-el gateway. En GitHub Actions, el despliegue se inicia automáticamente al pasar CI.
+`deploy all` publica los dos tags, despliega Laya, comprueba que su `/health`
+autenticado reporte `multilingual` y luego despliega y prueba el gateway. Los
+comandos equivalentes para operar por separado son:
+
+```sh
+./scripts/cloud push all
+./scripts/cloud deploy laya
+./scripts/cloud smoke laya
+./scripts/cloud deploy gateway
+```
+
+GitHub Actions realiza esos mismos pasos por separado para obtener, después del
+deploy de Laya, un ID token cuyo audience sea la URL privada real. El action
+produce tokens de ID para la service account sólo cuando se configura
+`token_format: id_token` y un audience
+([documentación del action](https://github.com/google-github-actions/auth#inputs-generating-id-tokens)).
+En GitHub, el despliegue empieza después de que `verify` pasa.
 
 ## Cloud Run y autenticación
 

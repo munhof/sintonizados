@@ -168,6 +168,13 @@ bootstrap_gcp() {
 	for account in "$runtime_sa" "$laya_sa"; do
 		gcloud iam service-accounts add-iam-policy-binding "$account" --member="serviceAccount:$deployer_sa" --role=roles/iam.serviceAccountUser --quiet >/dev/null
 	done
+	operator=$(gcloud auth list --filter=status:ACTIVE --format='value(account)')
+	case "$operator" in
+		"$deployer_sa") ;;
+		*@*.gserviceaccount.com) gcloud iam service-accounts add-iam-policy-binding "$deployer_sa" --member="serviceAccount:$operator" --role=roles/iam.serviceAccountOpenIdTokenCreator --quiet >/dev/null ;;
+		*@*) gcloud iam service-accounts add-iam-policy-binding "$deployer_sa" --member="user:$operator" --role=roles/iam.serviceAccountOpenIdTokenCreator --quiet >/dev/null ;;
+		*) fail 'Could not identify the active gcloud operator account for local Laya smoke authentication.' ;;
+	esac
 	if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
 		configure_wif
 	else
@@ -243,9 +250,8 @@ deploy_laya() {
 		--set-secrets 'LAYA_API_KEY=sintonizados-laya-api-key:latest' --quiet
 	gcloud run services add-iam-policy-binding "$laya_service" --region="$region" --member="serviceAccount:$runtime_sa" --role=roles/run.invoker --quiet >/dev/null
 	gcloud run services add-iam-policy-binding "$laya_service" --region="$region" --member="serviceAccount:$deployer_sa" --role=roles/run.invoker --quiet >/dev/null
-	./scripts/cloud smoke laya
 	ended=$(date +%s)
-	printf 'laya_deploy_to_ready_seconds=%s\n' "$((ended-started))"
+	printf 'laya_deploy_to_cloud_run_ready_seconds=%s\n' "$((ended-started))"
 	image_record laya
 }
 deploy_gateway() {
@@ -266,7 +272,11 @@ deploy_gateway() {
 }
 smoke_laya() {
 	url=$(service_url laya)
-	token=$(gcloud auth print-identity-token --audiences="$url" --include-email)
+	token=${LAYA_ID_TOKEN:-}
+	if [ -z "$token" ]; then
+		token=$(gcloud auth print-identity-token --impersonate-service-account="$deployer_sa" --audiences="$url" --include-email)
+	fi
+	unset LAYA_ID_TOKEN
 	response=$(curl --fail --silent --show-error --max-time 15 -H "X-Serverless-Authorization: Bearer $token" "$url/health") || fail 'Private Laya /health request failed.'
 	unset token
 	printf '%s' "$response" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' || fail 'Laya health status was not ok.'
@@ -325,6 +335,7 @@ case "$command" in
 				push_image laya
 				push_image gateway
 				deploy_laya
+				smoke_laya
 				deploy_gateway
 				;;
 			*) fail 'Usage: scripts/cloud deploy {gateway|laya|all}' ;;

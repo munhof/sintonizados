@@ -26,7 +26,8 @@ El workflow `deploy.yml` arranca después de CI `verify` exitoso en un push de
 `main`, o manualmente desde `main` luego de verificar que el SHA tiene CI verde.
 Usa el Environment `production`, WIF restringido a repository ID, ref main y el
 environment claim. No hay credenciales persistentes de GitHub ni service account
-JSON keys. Tanto Actions como la terminal usan `scripts/cloud`.
+JSON keys. Tanto Actions como la terminal usan `scripts/cloud`. Actions crea un
+ID token de corta duración para el audience Laya después de obtener la URL privada.
 
 ## Gateway
 

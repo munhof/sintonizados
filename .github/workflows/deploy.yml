@@ -70,8 +70,35 @@ jobs:
           version: '>= 363.0.0'
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Build, publish and deploy the exact commit
-        run: ./scripts/cloud deploy all
+      - name: Build and publish the exact commit
+        run: ./scripts/cloud push all
+
+      - name: Deploy private Laya first
+        run: ./scripts/cloud deploy laya
+
+      - name: Read Laya URL for its health-check audience
+        id: laya_url
+        run: echo "url=$(./scripts/cloud url laya)" >> "$GITHUB_OUTPUT"
+
+      - name: Mint a short-lived Laya health-check ID token
+        id: laya_auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.laya_url.outputs.url }}
+          id_token_include_email: true
+          create_credentials_file: false
+
+      - name: Check private Laya health and multilingual model readiness
+        env:
+          LAYA_ID_TOKEN: ${{ steps.laya_auth.outputs.id_token }}
+        run: ./scripts/cloud smoke laya
+
+      - name: Deploy gateway and check its public endpoints
+        run: ./scripts/cloud deploy gateway
 
       - name: Record deployed revisions
         run: |
