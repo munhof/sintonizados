@@ -1,5 +1,9 @@
 # Sintonizados
 
+<p align="center">
+  <img src="Sintonizados-LOGO.png" alt="Identidad visual de Sintonizados: ondas de audio y personas conectadas" width="360">
+</p>
+
 Accesibilidad para conferencias con muchas charlas simultáneas. Creado para la
 Vibeathon de Nerdearla 2026. El nombre conecta **sintonizar una radio**, sintonizarse
 con una charla y el proyecto **Sintonía**.
