@@ -94,7 +94,7 @@ func (t Transcriber) Run(ctx context.Context, k domain.SessionKnowledge, audio <
 	if !strings.HasPrefix(model, "models/") {
 		model = "models/" + model
 	}
-	if err := write(map[string]any{"setup": map[string]any{"model": model, "generationConfig": map[string]any{"responseModalities": []string{"TEXT"}}, "inputAudioTranscription": map[string]any{"languageCodes": []string{"en-US"}}}}); err != nil {
+	if err := write(map[string]any{"setup": map[string]any{"model": model, "generationConfig": map[string]any{"responseModalities": []string{"TEXT"}}, "inputAudioTranscription": map[string]any{"languageCodes": []string{}}}}); err != nil {
 		return err
 	}
 	c.SetReadDeadline(time.Now().Add(15 * time.Second))
@@ -139,6 +139,9 @@ func (t Transcriber) Run(ctx context.Context, k domain.SessionKnowledge, audio <
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-drain:
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			reason = "final_wait_timeout"
 			return nil
 		case chunk, ok := <-audio:
