@@ -17,7 +17,7 @@
   con audio real, calidad y latencia: [issue #1](https://github.com/munhof/sintonizados/issues/1).
 - [ ] Desplegar la demo de Cloud Run y comprobar SSE desde un navegador externo:
   [issue #2](https://github.com/munhof/sintonizados/issues/2).
-- [ ] Publicar cambios y comprobar GitHub Actions remoto: [issue #11](https://github.com/munhof/sintonizados/issues/11).
+- [x] Publicar cambios y comprobar GitHub Actions remoto: [issue #11](https://github.com/munhof/sintonizados/issues/11), [corrida verify](https://github.com/munhof/sintonizados/actions/runs/36088885768).
 - [x] Prueba de navegador y revisión visual en desktop y móvil.
 - [ ] Auditar teclado/lector de pantalla e incorporar feedback de accesibilidad:
   [issue #3](https://github.com/munhof/sintonizados/issues/3).
@@ -27,9 +27,10 @@ real con proveedores esté terminada. El modo demo entrega frases programadas.
 
 ## Evidencia local
 
-Ver `docs/operations/verification.md` para comandos/resultados observados. No hay
-URLs de CI o despliegue verificadas todavía. Las tareas de aceptación y evolución
-se siguen en los issues enlazados abajo; no equivalen a funcionalidades implementadas.
+Ver `docs/operations/verification.md` para comandos/resultados observados. La
+[corrida verify del commit cab5ea6](https://github.com/munhof/sintonizados/actions/runs/36088885768)
+pasó; el despliegue Cloud Run aún no está verificado. Las tareas de aceptación y
+evolución se siguen en los issues enlazados abajo; no equivalen a funcionalidades implementadas.
 
 ## Roadmap
 
