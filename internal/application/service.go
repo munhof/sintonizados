@@ -68,7 +68,7 @@ func (s *Service) Create(ctx context.Context, sid, title, language string) (doma
 	if len(s.sessions) >= s.limit {
 		return domain.Session{}, domain.ErrBusy
 	}
-	v := domain.Session{ID: sid, Title: title, Language: language, Status: "active", TranscriptionStatus: "waiting", Mode: s.Mode, CreatedAt: time.Now().UTC(), Knowledge: domain.SessionKnowledge{Language: language}}
+	v := domain.Session{ID: sid, Title: title, Language: language, Status: "active", TranscriptionStatus: "waiting", Mode: s.Mode, CreatedAt: time.Now().UTC(), Knowledge: domain.SessionKnowledge{Language: language, Metadata: map[string]string{"session_id": sid}}}
 	if err := s.Store.Create(v); err != nil {
 		return v, err
 	}

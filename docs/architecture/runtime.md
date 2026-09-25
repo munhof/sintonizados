@@ -31,3 +31,15 @@ finalizadas), 200 subtítulos por sesión, 20 transcripts de contexto, 32 chunks
 cola, 32 eventos por suscriptor y 2 MiB por mensaje de proveedor. No hay limpieza
 TTL: reiniciar o aumentar MAX_SESSIONS conociendo el costo. Para exposición pública
 masiva hacen falta cuotas de lectores/conexiones y controles de admisión adicionales.
+
+### Cierre Gemini (issue #13)
+
+EOF envía `audioStreamEnd` incluso sin audio pendiente. Se drenan finales hasta
+`turnComplete`, cierre WebSocket normal o 10 s. La ausencia de un último final
+puede ser silencio: se registra `final_wait_timeout` y se conservan los finales;
+no se inventa un final a partir de parciales. Errores del proveedor y cancelación
+siguen siendo errores distintos. El log `gemini_stream_closed` incluye session_id,
+last_audio_timestamp, last_transcript_timestamp, stream_close_timestamp,
+final_wait_duration y close_reason (`normal_stream_completion`,
+`final_wait_timeout`, `provider_timeout`, `provider_error`, `context_cancellation`).
+El deadline total de 9 minutos y la renovación pendiente (#4) son independientes.
