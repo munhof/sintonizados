@@ -23,8 +23,11 @@ proveedores Google debe comprobarse antes de afirmar que la demo real funciona.
 La evolución apunta a transferencia de significado y conocimiento contextual,
 no sólo sustitución de cadenas. Hoy se retienen 20 transcripts recientes por sesión.
 Los contratos reservan glosarios, entidades y metadatos; Google Translation Basic
-no aplica esos campos. Gemma podrá enriquecerlos asincrónicamente y Laya decidir
-estrategias y evaluar resultados. Esas capacidades aún no están implementadas.
+no aplica esos campos. Gemma podrá enriquecerlos asincrónicamente y Laya podrá
+elegir estrategia cuando haya varios modelos. Laya ya clasifica fragmentos en un
+servicio OCI Multilingual oficial; la evaluación real inicial no pasó y limita su
+uso en vivo. Ver [resultados y límites](operations/laya.md#calidad-medida-en-este-equipo).
+El routing multimodelo y output gate siguen futuros.
 
 ## Restricciones
 

@@ -48,7 +48,7 @@ async function createSession(id, title, token) {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ session_id: id, title, language: 'en' }),
+    body: JSON.stringify({ session_id: id, title, language: 'auto' }),
   });
   if (!response.ok) throw new Error(`No se pudo crear la sesión: ${await responseMessage(response)}`);
 }

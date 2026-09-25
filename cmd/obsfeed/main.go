@@ -55,7 +55,7 @@ func run(ctx context.Context, args []string, token string) error {
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	*base = strings.TrimRight(*base, "/")
-	createBody, _ := json.Marshal(map[string]string{"session_id": *sessionID, "title": *title, "language": "en"})
+	createBody, _ := json.Marshal(map[string]string{"session_id": *sessionID, "title": *title, "language": "auto"})
 	status, body, err := gatewayRequest(ctx, client, token, *base+"/api/sessions", "application/json", createBody, 0)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)

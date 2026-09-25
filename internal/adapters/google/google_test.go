@@ -23,12 +23,12 @@ func TestTranslationUsesStructuredRequestAndDecodesEntities(t *testing.T) {
 			t.Error(v)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"data":{"translations":[{"translatedText":"Go &amp; personas"}]}}`))
+		w.Write([]byte(`{"data":{"translations":[{"translatedText":"Go &amp; personas","detectedSourceLanguage":"en"}]}}`))
 	}))
 	defer server.Close()
 	tr := Translator{APIKey: "test", Endpoint: server.URL, Client: server.Client()}
 	got, err := tr.Translate(context.Background(), domain.TranslationRequest{Text: "Go & people", Source: "en", Target: "es"})
-	if err != nil || got.Text != "Go & personas" {
+	if err != nil || got.Text != "Go & personas" || got.DetectedSourceLanguage != "en" {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
@@ -46,7 +46,11 @@ func TestGeminiStreamsPCMAndWaitsForFinal(t *testing.T) {
 			return
 		}
 		if v["setup"] == nil {
-			t.Error(v)
+			t.Fatal(v)
+		}
+		config := v["setup"].(map[string]any)["inputAudioTranscription"].(map[string]any)
+		if codes, ok := config["languageCodes"].([]any); !ok || len(codes) != 0 {
+			t.Errorf("expected automatic language detection, got %v", config)
 		}
 		c.WriteJSON(map[string]any{"setupComplete": map[string]any{}})
 		if err := c.ReadJSON(&v); err != nil {
@@ -85,6 +89,22 @@ func TestTranslationFailureDoesNotLeakKey(t *testing.T) {
 	tr := Translator{APIKey: "secret-test", Endpoint: server.URL, Client: server.Client()}
 	_, err := tr.Translate(context.Background(), domain.TranslationRequest{})
 	if err == nil || strings.Contains(err.Error(), "secret-test") {
+		t.Fatal(err)
+	}
+}
+
+func TestTranslationAutodetectOmitsSource(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var v map[string]any
+		json.NewDecoder(r.Body).Decode(&v)
+		if _, present := v["source"]; present {
+			t.Error("unknown/mixed must omit source, not send an empty or fixed language")
+		}
+		w.Write([]byte(`{"data":{"translations":[{"translatedText":"Hola"}]}}`))
+	}))
+	defer server.Close()
+	_, err := (Translator{Endpoint: server.URL}).Translate(context.Background(), domain.TranslationRequest{Text: "Hello", Target: "es"})
+	if err != nil {
 		t.Fatal(err)
 	}
 }

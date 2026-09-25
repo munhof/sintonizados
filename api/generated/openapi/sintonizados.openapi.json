@@ -892,7 +892,10 @@
             },
             "Language": {
                 "type": "string",
+                "description": "Session language is only a display hint; classification is per transcript segment.",
                 "enum": [
+                    "auto",
+                    "es",
                     "en"
                 ]
             },
@@ -929,6 +932,15 @@
             },
             "OperatorPageOutputPayload": {
                 "type": "string"
+            },
+            "SegmentLanguage": {
+                "type": "string",
+                "enum": [
+                    "es",
+                    "en",
+                    "mixed",
+                    "unknown"
+                ]
             },
             "Session": {
                 "type": "object",
@@ -994,6 +1006,32 @@
             "Subtitle": {
                 "type": "object",
                 "properties": {
+                    "segment_id": {
+                        "type": "string"
+                    },
+                    "parent_segment_id": {
+                        "type": "string"
+                    },
+                    "language": {
+                        "$ref": "#/components/schemas/SegmentLanguage"
+                    },
+                    "language_confidence": {
+                        "type": "number",
+                        "maximum": 1,
+                        "minimum": 0,
+                        "description": "Selected choice probability, not proof of language accuracy; 0 when unavailable.",
+                        "format": "double"
+                    },
+                    "requires_translation": {
+                        "type": "boolean"
+                    },
+                    "decision_provider": {
+                        "type": "string"
+                    },
+                    "decision_fallback": {
+                        "type": "string",
+                        "description": "Explicit fallback strategy when classification or subdivision is inconclusive."
+                    },
                     "id": {
                         "type": "integer",
                         "format": "int64"
@@ -1048,11 +1086,16 @@
                 "required": [
                     "audio_ingress_at",
                     "correlation_id",
+                    "decision_provider",
                     "end_to_end_ms",
                     "final",
                     "id",
+                    "language",
+                    "language_confidence",
                     "original",
                     "published_at",
+                    "requires_translation",
+                    "segment_id",
                     "session_id",
                     "spanish",
                     "transcript_at",

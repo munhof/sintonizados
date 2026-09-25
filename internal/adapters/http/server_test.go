@@ -33,8 +33,10 @@ func TestHTTPContractAndAuthorization(t *testing.T) {
 		{"/api/sessions", `{"session_id":"a","title":"A","language":"en"}`, "", 401},
 		{"/api/sessions", `{"session_id":"a","title":"A","language":"en"}`, "secret", 201},
 		{"/api/sessions", `{"session_id":"a","title":"A","language":"en"}`, "secret", 409},
+		{"/api/sessions", `{"session_id":"es","title":"ES","language":"es"}`, "secret", 201},
+		{"/api/sessions", `{"session_id":"auto","title":"Auto","language":"auto"}`, "secret", 201},
 		{"/api/sessions", `{"session_id":"bad id","title":"A","language":"en"}`, "secret", 400},
-		{"/api/sessions", `{"session_id":"b","title":"A","language":"es"}`, "secret", 400},
+		{"/api/sessions", `{"session_id":"b","title":"A","language":"fr"}`, "secret", 400},
 		{"/api/sessions", `{"session_id":"b","title":"A","language":"en"} {}`, "secret", 400},
 	} {
 		req, _ := http.NewRequest("POST", server.URL+tc.path, strings.NewReader(tc.body))

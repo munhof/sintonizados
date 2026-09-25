@@ -5,7 +5,24 @@ namespace sintonizados.api
 operation GetSubtitles { input: SessionInput, output: SubtitlesOutput, errors: [NotFound] }
 structure SubtitlesOutput { @required subtitles: Subtitles }
 list Subtitles { member: Subtitle }
+enum SegmentLanguage {
+ ES = "es"
+ EN = "en"
+ MIXED = "mixed"
+ UNKNOWN = "unknown"
+}
+@range(min: 0, max: 1)
+double LanguageConfidence
 structure Subtitle {
+    @required segment_id: String
+    parent_segment_id: String
+    @required language: SegmentLanguage
+    /// Selected choice probability, not proof of language accuracy; 0 when unavailable.
+    @required language_confidence: LanguageConfidence
+    @required requires_translation: Boolean
+    @required decision_provider: String
+    /// Explicit fallback strategy when classification or subdivision is inconclusive.
+    decision_fallback: String
     @required id: Long
     @required session_id: SessionID
     @required correlation_id: String

@@ -93,3 +93,7 @@ usá otro ID/stream key y ejecutá otro `obs-feed`; MediaMTX acepta rutas RTMP p
 sesión.
 
 HLS, RTMP remoto seguro y fuentes de escenario alojadas siguen siendo evoluciones.
+
+Para charlas que alternan español e inglés, configurar [Laya Multilingual](laya.md).
+El idioma se clasifica por fragmento; la fuente OBS o browser no cambia de sesión
+al cambiar de idioma. EOF Gemini y clasificación de idiomas son flujos separados.

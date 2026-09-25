@@ -13,8 +13,9 @@ flowchart LR
   A[Audio PCM por sesión] --> B[Transcriber / Gemini Live]
   B --> C[Eventos de transcripción]
   C --> K[Session Knowledge]
-  K --> D[DecisionEngine determinista]
-  D --> E[Translator / Google Translation]
+  K --> D[DecisionEngine / Laya Multilingual]
+  D -->|en / mixed / unknown| E[Translator / Google Translation]
+  D -->|es: conservar| F
   E --> F[Subtítulos en vivo / SSE]
 ```
 
@@ -27,17 +28,20 @@ de significado. La incorporación adaptativa de razonamiento todavía es futura.
 
 - Sesiones independientes, ingestión PCM ordenada, cierre y errores visibles.
 - Go HTTP, páginas HTML y JavaScript mínimo, originales parciales y subtítulos
-  finales en inglés y español por SSE; reconexión con historial acotado.
+  finales originales y en español por SSE; reconexión con historial acotado.
 - Captura en vivo desde el navegador y conector de audio OBS por RTMP. El segundo
   usa MediaMTX y FFmpeg en contenedores; `/obs/{session_id}` sirve un overlay
   transparente para agregar como Browser Source en una escena OBS. La recepción
   está implementada; falta validar el flujo con OBS instalado en la máquina de demo.
 - Adaptadores Gemini Live y Google Translation Basic; pruebas de protocolo con
-  servidores locales. **No comprobados con credenciales reales todavía**.
+  servidores locales. El usuario confirmó captura y traducción reales; la aceptación
+  de dos sesiones con audio real sigue pendiente.
 - Modo `demo` con frases programadas: prueba el transporte y la concurrencia,
   **no reconoce audio ni demuestra calidad de IA**.
 - `SessionStore`, `EventBus`, `Transcriber`, `Translator`, `ReasoningEngine` y
-  `DecisionEngine`; memoria local, decisión determinista, sin infraestructura extra.
+  `DecisionEngine`; memoria local y Laya Multilingual oficial en servicio OCI
+  separado, con fallback determinista. Clasificación por fragmento es/en/mixed/unknown,
+  español preservado y división simple de mixed por puntuación.
 - Logs JSON, tiempos por subtítulo y métricas Prometheus por sesión.
 - Smithy validable, OpenAPI generado versionado, CI y herramientas OCI.
 
@@ -111,6 +115,20 @@ demo los subtítulos siguen siendo frases programadas. Detené la transmisión d
 o usá Ctrl-C en `obs-feed` para cerrar la sesión. Más detalles en
 [operación local](docs/operations/local.md).
 
+### Decisiones de idioma con Laya
+
+```sh
+./scripts/dev laya-start
+./scripts/dev laya-status  # esperar status=ok y multilingual cargado
+./scripts/dev laya-smoke   # evaluación real: informa calidad por cada ejemplo; puede fallar
+```
+
+En `.env`: `DECISION_ENGINE=laya` y `LAYA_URL=http://sintonizados-laya:8000`.
+Después de terminar las sesiones actuales, reiniciar el gateway con
+`env ENV_FILE=.env ./scripts/dev run` (compatible con fish).
+El idioma se decide por fragmento; `mixed` residual usa un fallback explícito y
+puede requerir mejoras de segmentación. Ver [operación Laya](docs/operations/laya.md).
+
 ## Desarrollo y contrato
 
 ```sh
@@ -140,6 +158,10 @@ La semántica del audio y SSE está en [api/README.md](api/README.md).
 | `GEMINI_API_KEY` | Clave Gemini Developer API para transcripción |
 | `GOOGLE_TRANSLATION_API_KEY` | Clave restringida a Cloud Translation Basic |
 | `GEMINI_MODEL` | `gemini-3.5-transcribe-live`; depende del acceso de la cuenta |
+| `DECISION_ENGINE` | `deterministic`; `laya` activa clasificación por fragmento |
+| `LAYA_URL` | `http://sintonizados-laya:8000`; servidor oficial independiente |
+| `LAYA_API_KEY` | Opcional, bearer compartido Laya ↔ gateway; no es una clave Google |
+| `LAYA_ENV_FILE` | Opcional env-file separado para Laya, por ejemplo `.laya.env` |
 | `ENV_FILE` | Wrapper local: `.env.example`; usar `.env` para credenciales |
 
 Las claves de proveedores nunca llegan al navegador. El token de ejemplo es
@@ -153,7 +175,8 @@ Leé [arquitectura](docs/architecture/overview.md), [ADRs](docs/adr/README.md),
 La imagen usa `Containerfile`, usuario sin privilegios y un runtime sin shell.
 No necesita Compose, Kubernetes ni un broker externo.
 
-El MVP funciona en **un proceso**. Aumentar réplicas con memoria local pierde la
+El estado de sesiones del MVP pertenece a **un proceso Go**; Laya es un servicio
+separado. Aumentar réplicas con memoria local pierde la
 coherencia; la afinidad no lo resuelve. Cloud Run se prepara como demo de instancia
 única, con las limitaciones detalladas en la documentación. **No hay despliegue
 remoto verificado**.

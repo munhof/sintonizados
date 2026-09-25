@@ -12,7 +12,11 @@
 - [x] Timestamps, latencia, logs y métricas por sesión.
 - [x] Smithy 2.0 → OpenAPI 3.1.0 versionado; validador independiente.
 - [x] Scripts OCI, Containerfile, CI y ADRs.
-- [x] Interfaces de razonamiento y decisión sin cargar Gemma/Laya.
+- [x] Laya Multilingual oficial OCI, idioma por fragmento, mixed simple y fallback:
+  [issue #12](https://github.com/munhof/sintonizados/issues/12).
+- [x] Cierre EOF Gemini diferenciado de timeout/error/cancelación:
+  [issue #13](https://github.com/munhof/sintonizados/issues/13).
+- [x] Interfaz de razonamiento sin cargar Gemma.
 
 ## Aceptación real pendiente
 

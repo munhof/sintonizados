@@ -18,3 +18,10 @@ Cloud Run documenta afinidad de mejor esfuerzo, por lo que no habilitamos sticky
 sessions como parche de consistencia. Fuente:
 [session affinity](https://docs.cloud.google.com/run/docs/configuring/session-affinity).
 El paso a múltiples instancias exige el trabajo descrito en [sesiones](sessions.md).
+
+Laya Multilingual se despliega separadamente del binario Go. El wrapper local usa
+red Podman y DNS `sintonizados-laya`; en Cloud Run se deberá suministrar una URL
+alcanzable y autenticación/recursos adecuados al servicio de modelos. La receta
+Cloud Run existente no despliega Laya: conserva decisión determinista hasta
+configurarlo. Ver [operación Laya](../operations/laya.md). No aumentar réplicas Go
+como mecanismo de escalado del modelo o del estado de sesiones.

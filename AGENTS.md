@@ -14,9 +14,11 @@ se sirve embebido desde Go. Contrato público: Smithy 2.0; OpenAPI 3.1 derivado.
 Implementado: ingestión PCM, captura desde browser, conector OBS/RTMP con MediaMTX
 y FFmpeg OCI, overlay transparente para OBS, dos sesiones concurrentes, SSE con
 replay acotado, MemorySessionStore/MemoryEventBus, adapters Google y demo, métricas,
-CI OCI.
+CI OCI. Laya Multilingual oficial en servicio OCI separado, DecisionEngine.Decide
+y metadatos por fragmento; mixed con división simple y fallback explícito.
+Ver docs/operations/laya.md y ADR 0019 antes de cambiar decisiones de idioma.
 Las pruebas de Google usan dobles locales; no afirmar validación real sin evidencia.
-NO implementado: Laya, Gemma, stores/buses distribuidos, routing multimodelo,
+NO implementado: routing/output gate adaptativo de Laya, Gemma, stores/buses distribuidos, routing multimodelo,
 afinidad como solución de consistencia, renovación automática Live, recepción HLS,
 SRT/VTT.
 

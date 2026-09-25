@@ -16,7 +16,10 @@ structure CreateInput {
     @required title: Title
     @required language: Language
 }
+/// Session language is only a display hint; classification is per transcript segment.
 enum Language {
+    AUTO = "auto"
+    ES = "es"
     EN = "en"
 }
 enum SessionStatus {

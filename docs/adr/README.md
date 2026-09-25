@@ -18,3 +18,5 @@
 - [0016 — HTTP Go independiente del modelo](0016-http-independent.md)
 - [0017 — Generación y versionado de OpenAPI](0017-generated-openapi.md)
 - [0018 — Conector OBS mediante RTMP y overlay Browser Source](0018-obs-rtmp.md)
+
+- [0019 — Laya Multilingual e idioma por fragmento](0019-laya-segment-language.md)

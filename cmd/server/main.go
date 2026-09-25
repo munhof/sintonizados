@@ -6,6 +6,7 @@ import (
 	"github.com/munhof/sintonizados/internal/adapters/demo"
 	"github.com/munhof/sintonizados/internal/adapters/google"
 	httpadapter "github.com/munhof/sintonizados/internal/adapters/http"
+	"github.com/munhof/sintonizados/internal/adapters/laya"
 	"github.com/munhof/sintonizados/internal/adapters/memory"
 	"github.com/munhof/sintonizados/internal/application"
 	"github.com/munhof/sintonizados/internal/domain"
@@ -54,7 +55,16 @@ func main() {
 		slog.Error("PROVIDER_MODE must be demo or google")
 		os.Exit(1)
 	}
-	service := application.New(memory.NewSessionStore(), memory.NewEventBus(), transcriber, translator, domain.DeterministicDecisionEngine{}, mode, limit)
+	var decision domain.DecisionEngine = domain.DeterministicDecisionEngine{}
+	switch env("DECISION_ENGINE", "deterministic") {
+	case "deterministic":
+	case "laya":
+		decision = laya.LayaDecisionEngine{URL: env("LAYA_URL", "http://sintonizados-laya:8000"), APIKey: os.Getenv("LAYA_API_KEY")}
+	default:
+		slog.Error("DECISION_ENGINE must be deterministic or laya")
+		os.Exit(1)
+	}
+	service := application.New(memory.NewSessionStore(), memory.NewEventBus(), transcriber, translator, decision, mode, limit)
 	server := &http.Server{Addr: ":" + env("PORT", "8080"), Handler: httpadapter.New(service, token), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()

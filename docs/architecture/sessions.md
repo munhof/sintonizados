@@ -2,7 +2,10 @@
 
 `session_id` estable, elegido por el operador, identifica una charla. Se restringe
 a 1..64 caracteres alfanuméricos, guion o guion bajo. El título admite 1..200
-caracteres y el MVP acepta `en`. Español es el destino fijo.
+caracteres. El campo language acepta `en`, `es` o `auto` como hint informativo
+compatible; no determina el idioma de los subtítulos. Español es el destino fijo.
+Cada TranscriptSegment recibe su idioma y confianza de DecisionEngine; la sesión
+puede alternar idiomas. Subdivisiones mixed conservan parent_segment_id.
 
 `SessionStore` proporciona Create/Get/List/Update. MemorySessionStore usa exclusión
 mutua y devuelve copias de snapshots, incluyendo mapas y listas de conocimiento.

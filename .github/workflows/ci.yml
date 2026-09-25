@@ -18,6 +18,8 @@ jobs:
         run: ./scripts/dev openapi
       - name: Generated contract is current
         run: test -z "$(git status --porcelain -- api/generated/openapi)"
+      - name: Build pinned official Laya OCI service
+        run: ./scripts/dev laya-build
       - name: Go tests with race detector
         run: ./scripts/dev test
       - name: Go lint

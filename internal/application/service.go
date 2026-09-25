@@ -53,7 +53,7 @@ func (s *Service) emit(ctx context.Context, sid, cid string, kind domain.EventKi
 var validID = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 func (s *Service) Create(ctx context.Context, sid, title, language string) (domain.Session, error) {
-	if !validID.MatchString(sid) || strings.TrimSpace(title) == "" || utf8.RuneCountInString(title) > 200 || language != "en" {
+	if !validID.MatchString(sid) || strings.TrimSpace(title) == "" || utf8.RuneCountInString(title) > 200 || (language != "en" && language != "es" && language != "auto") {
 		return domain.Session{}, domain.ErrInvalid
 	}
 	s.mu.Lock()
@@ -176,33 +176,112 @@ func (s *Service) translate(ctx context.Context, sid string, t domain.Transcript
 	if err != nil {
 		return err
 	}
-	req := domain.TranslationRequest{Text: t.Text, Source: snap.Session.Language, Target: "es", Knowledge: snap.Session.Knowledge}
-	strategy, err := s.decision.Before(ctx, req)
+	segment := domain.TranscriptSegment{ID: id(), SessionID: sid, Text: t.Text}
+	decision, err := s.classify(ctx, segment, snap.Session.Knowledge)
 	if err != nil {
 		return err
 	}
-	if strategy.Translator != "standard" || strategy.NeedReasoning {
-		return domain.ErrUnavailable
+	if decision.Language == "mixed" {
+		parts := splitMixed(t.Text)
+		if len(parts) > 1 {
+			for _, text := range parts {
+				child := domain.TranscriptSegment{ID: id(), ParentID: segment.ID, SessionID: sid, Text: text}
+				d, err := s.classify(ctx, child, snap.Session.Knowledge)
+				if err != nil {
+					return err
+				}
+				if err := s.publishSegment(ctx, sid, t, child, d, snap.Session.Knowledge); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 	}
-	s.emit(ctx, sid, t.CorrelationID, domain.TranslationRequested, req)
-	start := time.Now()
-	callctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	return s.publishSegment(ctx, sid, t, segment, decision, snap.Session.Knowledge)
+}
+func (s *Service) classify(ctx context.Context, segment domain.TranscriptSegment, k domain.SessionKnowledge) (domain.DecisionResult, error) {
+	request := domain.DecisionRequest{Stage: "classify", Segment: segment, Knowledge: k}
+	callctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	result, err := s.translator.Translate(callctx, req)
-	if err != nil {
-		return err
+	decision, err := s.decision.Decide(callctx, request)
+	if ctx.Err() != nil {
+		return domain.DecisionResult{}, ctx.Err()
+	}
+	valid := decision.Language == "es" || decision.Language == "en" || decision.Language == "mixed" || decision.Language == "unknown"
+	if err != nil || !valid {
+		decision, err = (domain.DeterministicDecisionEngine{}).Decide(ctx, request)
+		decision.Fallback = "decision_unavailable_source_autodetect"
+		slog.Warn("decision_fallback", "session_id", segment.SessionID, "segment_id", segment.ID)
+	}
+	// Policy is explicit: Spanish is preserved; other classes need translation.
+	decision.RequiresTranslation = decision.Language != "es"
+	if decision.Language == "mixed" {
+		decision.Fallback = "mixed_source_autodetect"
+	}
+	if decision.Language == "unknown" && decision.Fallback == "" {
+		decision.Fallback = "unknown_source_autodetect"
+	}
+	return decision, err
+}
+
+// splitMixed preserves punctuation and ordering, never guesses language boundaries.
+// Bound fanout; unresolved bilingual clauses remain explicitly marked mixed.
+func splitMixed(text string) []string {
+	parts := []string{}
+	start := 0
+	for i, r := range text {
+		if strings.ContainsRune(",;.!?\n", r) {
+			end := i + utf8.RuneLen(r)
+			if p := strings.TrimSpace(text[start:end]); p != "" {
+				parts = append(parts, p)
+			}
+			start = end
+			if len(parts) == 7 {
+				break
+			}
+		}
+	}
+	if p := strings.TrimSpace(text[start:]); p != "" {
+		parts = append(parts, p)
+	}
+	return parts
+}
+func (s *Service) publishSegment(ctx context.Context, sid string, t domain.Transcript, segment domain.TranscriptSegment, decision domain.DecisionResult, k domain.SessionKnowledge) error {
+	t.Text = segment.Text
+	segment.Language = decision.Language
+	segment.LanguageConfidence = decision.LanguageConfidence
+	segment.RequiresTranslation = decision.RequiresTranslation
+	source := ""
+	if segment.Language == "en" {
+		source = "en"
+	}
+	req := domain.TranslationRequest{Text: segment.Text, Source: source, Target: "es", Knowledge: k}
+	start := time.Now()
+	result := domain.Translation{Text: segment.Text, Provider: "passthrough"}
+	if decision.RequiresTranslation {
+		s.emit(ctx, sid, t.CorrelationID, domain.TranslationRequested, req)
+		callctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		var err error
+		result, err = s.translator.Translate(callctx, req)
+		if err != nil {
+			return err
+		}
+		s.emit(ctx, sid, t.CorrelationID, domain.TranslationProduced, result)
 	}
 	translated := time.Now().UTC()
-	gate, err := s.decision.After(ctx, req, result)
-	if err != nil {
-		return err
+	if decision.Language == "unknown" && result.DetectedSourceLanguage == "es" {
+		// Translation Basic reports source detection when source is omitted. Preserve Spanish verbatim.
+		decision.Language = "es"
+		decision.RequiresTranslation = false
+		decision.Fallback = "google_detected_es"
+		segment.Language = "es"
+		segment.RequiresTranslation = false
+		result.Text = segment.Text
 	}
-	if !gate.Publish || gate.Retry || gate.Escalate {
-		return domain.ErrUnavailable
-	}
-	s.emit(ctx, sid, t.CorrelationID, domain.TranslationProduced, result)
+	slog.Info("segment_decided", "session_id", sid, "segment_id", segment.ID, "language", decision.Language, "language_confidence", decision.LanguageConfidence, "decision_provider", decision.Provider, "fallback", decision.Fallback)
 	now := time.Now().UTC()
-	sub := domain.Subtitle{SessionID: sid, CorrelationID: t.CorrelationID, Original: t.Text, Spanish: result.Text, Final: true, AudioIngressAt: t.IngressAt, TranscriptAt: t.At, TranslationAt: translated, PublishedAt: now, TranscriptionMS: float64(t.At.Sub(t.IngressAt).Microseconds()) / 1000, TranslationMS: float64(translated.Sub(start).Microseconds()) / 1000, EndToEndMS: float64(now.Sub(t.IngressAt).Microseconds()) / 1000}
+	sub := domain.Subtitle{SegmentID: segment.ID, ParentSegmentID: segment.ParentID, Language: segment.Language, LanguageConfidence: segment.LanguageConfidence, RequiresTranslation: segment.RequiresTranslation, DecisionProvider: decision.Provider, DecisionFallback: decision.Fallback, SessionID: sid, CorrelationID: t.CorrelationID, Original: t.Text, Spanish: result.Text, Final: true, AudioIngressAt: t.IngressAt, TranscriptAt: t.At, TranslationAt: translated, PublishedAt: now, TranscriptionMS: float64(t.At.Sub(t.IngressAt).Microseconds()) / 1000, TranslationMS: float64(translated.Sub(start).Microseconds()) / 1000, EndToEndMS: float64(now.Sub(t.IngressAt).Microseconds()) / 1000}
 	s.Store.Update(sid, func(x *domain.Snapshot) {
 		x.Session.SubtitleCount++
 		sub.ID = x.Session.SubtitleCount

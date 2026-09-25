@@ -7,11 +7,16 @@ smithy_image=localhost/sintonizados-smithy:1.73.0
 obs_feed_image=localhost/sintonizados-obs-feed:dev
 obs_rtmp_image=docker.io/bluenviron/mediamtx:1.21.1
 go_tool() {
-  podman run --rm --userns=keep-id -e HOME=/tmp -e GOPATH=/tmp/go -e GOCACHE=/tmp/go-build -e GOMODCACHE=/go/pkg/mod -v sintonizados-go-build:/tmp/go-build -v sintonizados-go-mod:/go/pkg/mod -v "$root:/workspace:Z" -w /workspace "$go_image" "$@"
+  podman run --rm --network "${GO_TOOL_NETWORK:-private}" --userns=keep-id -e HOME=/tmp -e GOPATH=/tmp/go -e GOCACHE=/tmp/go-build -e GOMODCACHE=/go/pkg/mod -v sintonizados-go-build:/tmp/go-build -v sintonizados-go-mod:/go/pkg/mod -v "$root:/workspace:Z" -w /workspace "$go_image" "$@"
 }
 smithy_tool() {
   podman build -t "$smithy_image" -f containers/Smithy.Containerfile .
   podman run --rm --userns=keep-id -e HOME=/tmp -v "$root:/workspace:Z" "$smithy_image" "$@"
+}
+laya_image=localhost/sintonizados-laya:dev
+ensure_network() { podman network exists sintonizados || podman network create sintonizados; }
+podman_run_laya() {
+  if [ -n "${LAYA_ENV_FILE:-}" ]; then podman run --env-file "$LAYA_ENV_FILE" "$@"; else podman run "$@"; fi
 }
 command=${1:-help}
 [ "$#" -eq 0 ] || shift
@@ -21,9 +26,22 @@ case "$command" in
   lint) go_tool sh -ec 'test -z "$(gofmt -l cmd internal)"; go vet ./...' ;;
   fmt) go_tool go fmt ./... ;;
   tidy) go_tool go mod tidy ;;
-  run) podman build -t localhost/sintonizados:dev .; exec podman run --rm --name sintonizados -p 127.0.0.1:8080:8080 --env-file "${ENV_FILE:-.env.example}" localhost/sintonizados:dev ;;
+  run) ensure_network; podman build -t localhost/sintonizados:dev .; exec podman run --rm --name sintonizados --network sintonizados -p 127.0.0.1:8080:8080 --env-file "${ENV_FILE:-.env.example}" localhost/sintonizados:dev ;;
   container) podman build -t localhost/sintonizados:dev . ;;
   feed) exec podman run --rm --network host --env-file "${ENV_FILE:-.env.example}" -v "$root:/data:ro,Z" --entrypoint /feed localhost/sintonizados:dev "$@" ;;
+  laya-build) podman build -t "$laya_image" -f containers/Laya.Containerfile . ;;
+  laya-start)
+    ensure_network
+    "$0" laya-build
+    if podman container exists sintonizados-laya; then
+      podman start sintonizados-laya
+    else
+      podman_run_laya -d --name sintonizados-laya --network sintonizados -p 127.0.0.1:8090:8000 -v sintonizados-laya-cache:/home/laya/.cache/huggingface "$laya_image"
+    fi
+    printf '%s\n' 'Laya precarga multilingual; el primer inicio descarga pesos. Consultá ./scripts/dev laya-status.' ;;
+  laya-status) podman exec sintonizados-laya python -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8000/health",timeout=5).read().decode())' ;;
+  laya-smoke) GO_TOOL_NETWORK=sintonizados go_tool env LAYA_TEST_URL=http://sintonizados-laya:8000 go test -count=1 -v ./internal/adapters/laya -run TestRealMultilingual ;;
+  laya-stop) podman stop sintonizados-laya ;;
   obs-start)
     if podman container exists sintonizados-rtmp; then
       if [ "$(podman inspect --format '{{.State.Running}}' sintonizados-rtmp)" = true ]; then
@@ -49,5 +67,5 @@ case "$command" in
   openapi) "$0" smithy-build; podman run --rm -v "$root:/workspace:ro,Z" docker.io/library/python:3.13-slim sh -ec 'pip install --quiet --disable-pip-version-check openapi-spec-validator==0.7.2; python -m openapi_spec_validator /workspace/api/generated/openapi/sintonizados.openapi.json' ;;
   docs) printf '%s\n' 'Contexto: docs/project-context.md' 'Arquitectura: docs/architecture/overview.md' 'Contrato: api/smithy/ + api/README.md'; "$0" openapi ;;
   gcloud) exec podman run --rm -it -v sintonizados-gcloud:/root/.config/gcloud -v "$root:/workspace:Z" -w /workspace gcr.io/google.com/cloudsdktool/google-cloud-cli:stable gcloud "$@" ;;
-  *) printf '%s\n' 'Usage: ./scripts/dev {build|test|lint|fmt|tidy|run|container|contract|feed|obs-start|obs-stop|obs-status|obs-feed|smoke|smithy-validate|smithy-build|openapi|docs|gcloud}' ;;
+  *) printf '%s\n' 'Usage: ./scripts/dev {build|test|lint|fmt|tidy|run|container|contract|feed|laya-build|laya-start|laya-status|laya-smoke|laya-stop|obs-start|obs-stop|obs-status|obs-feed|smoke|smithy-validate|smithy-build|openapi|docs|gcloud}' ;;
 esac

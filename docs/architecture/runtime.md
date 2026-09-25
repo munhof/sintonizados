@@ -8,7 +8,7 @@ Las sesiones avanzan independientemente; el orden dentro de una sesión se conse
 Ingestión acepta chunks de 2..32000 bytes pares, PCM16 LE mono 16 kHz. Las secuencias
 empiezan en 1. Un salto o duplicado devuelve 409; cola llena devuelve 429 sin
 consumir secuencia. 202 significa aceptado en memoria, no procesado ni durable.
-Un fallo de proveedor lleva a `failed`; no hay traducción ficticia como fallback.
+Un fallo de transcripción/traducción lleva a `failed`; no hay traducción ficticia como fallback.
 
 Para OBS local, MediaMTX recibe RTMP por `session_id`; el comando Go `obs-feed`
 ejecuta FFmpeg en el mismo contenedor auxiliar, decodifica sólo la pista de audio,

@@ -68,3 +68,14 @@ todos los límites posibles; agregar regresiones cuando cambie el contrato.
 `./scripts/dev docs` valida y muestra las fuentes de documentación. Markdown y
 OpenAPI generado permiten agregar Scalar/Swagger UI después; no hay portal extra.
 Referencia: [Smithy → OpenAPI](https://smithy.io/2.0/guides/model-translations/converting-to-openapi.html).
+
+## Idioma por fragmento
+
+`Session.language` es un hint informativo (`auto`, `en`, `es`) compatible con
+clientes anteriores; no se usa como source global. Cada Subtitle lleva segment_id,
+parent_segment_id opcional (subdivisión), language (`es/en/mixed/unknown`),
+language_confidence (probabilidad elegida, 0 si no disponible), requires_translation,
+decision_provider y decision_fallback opcional. SSE y consulta de historial
+comparten el mismo schema. Español se conserva. Mixed residual/unknown usa
+source autodetect del traductor; no se garantiza resolver todo el code-switching.
+El servicio privado Laya usa su API upstream; no añade endpoints al backend público.

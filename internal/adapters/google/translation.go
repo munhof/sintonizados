@@ -21,7 +21,11 @@ func (t Translator) Translate(ctx context.Context, r domain.TranslationRequest) 
 	if endpoint == "" {
 		endpoint = "https://translation.googleapis.com/language/translate/v2"
 	}
-	body, _ := json.Marshal(map[string]string{"q": r.Text, "source": r.Source, "target": r.Target, "format": "text"})
+	payload := map[string]string{"q": r.Text, "target": r.Target, "format": "text"}
+	if r.Source != "" {
+		payload["source"] = r.Source
+	}
+	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(body))
 	if err != nil {
 		return domain.Translation{}, domain.ErrUnavailable
@@ -43,12 +47,13 @@ func (t Translator) Translate(ctx context.Context, r domain.TranslationRequest) 
 	var out struct {
 		Data struct {
 			Translations []struct {
-				Text string `json:"translatedText"`
+				Text                   string `json:"translatedText"`
+				DetectedSourceLanguage string `json:"detectedSourceLanguage"`
 			} `json:"translations"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil || len(out.Data.Translations) != 1 || out.Data.Translations[0].Text == "" {
 		return domain.Translation{}, domain.ErrUnavailable
 	}
-	return domain.Translation{Text: html.UnescapeString(out.Data.Translations[0].Text), Provider: "google-translation-basic"}, nil
+	return domain.Translation{Text: html.UnescapeString(out.Data.Translations[0].Text), Provider: "google-translation-basic", DetectedSourceLanguage: out.Data.Translations[0].DetectedSourceLanguage}, nil
 }

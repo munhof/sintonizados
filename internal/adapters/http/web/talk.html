@@ -1,6 +1,6 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Title}} — Sintonizados</title>
 <style>body{font:20px system-ui;background:#101326;color:#edf0ff;max-width:1200px;margin:auto;padding:1.5rem}a{color:#b9bcff}.columns{display:grid;grid-template-columns:1fr 1fr;gap:2rem}section{background:#1d2240;padding:1.5rem;border-radius:14px}li{margin-bottom:1.2rem}ol{list-style:none;padding:0}#partial{opacity:.65}.badge{color:#f3b5eb}#connection{font-size:1rem}@media(max-width:650px){.columns{grid-template-columns:1fr}}</style>
-<a href="/">← Charlas</a><h1>{{.Title}}</h1>{{if eq .Mode "demo"}}<p class="badge">Demo simulada · texto programado</p>{{end}}<p id="connection" role="status">Conectando…</p><div class="columns"><section lang="en"><h2>Original</h2><ol id="original"></ol><p id="partial"></p></section><section lang="es"><h2>Español</h2><ol id="spanish" aria-live="polite" aria-relevant="additions"></ol></section></div>
+<a href="/">← Charlas</a><h1>{{.Title}}</h1>{{if eq .Mode "demo"}}<p class="badge">Demo simulada · texto programado</p>{{end}}<p id="connection" role="status">Conectando…</p><div class="columns"><section lang=""><h2>Original</h2><ol id="original"></ol><p id="partial"></p></section><section lang="es"><h2>Español</h2><ol id="spanish" aria-live="polite" aria-relevant="additions"></ol></section></div>
 <script>
 const status=document.querySelector('#connection'),original=document.querySelector('#original'),spanish=document.querySelector('#spanish'),partial=document.querySelector('#partial');let last=0;
 const stream=new EventSource('/api/sessions/'+encodeURIComponent({{.ID}})+'/events');
@@ -8,6 +8,6 @@ stream.onopen=()=>{status.textContent='En vivo · subtítulos conectados'};
 stream.onerror=()=>{status.textContent='Reconectando…'};
 stream.addEventListener('reset',()=>{last=0;original.replaceChildren();spanish.replaceChildren()});
 stream.addEventListener('partial',e=>{partial.textContent=JSON.parse(e.data).text});
-stream.addEventListener('subtitle',e=>{const s=JSON.parse(e.data);if(s.id<=last)return;last=s.id;partial.textContent='';for(const [list,text]of [[original,s.original],[spanish,s.spanish]]){const li=document.createElement('li');li.textContent=text;list.append(li);while(list.children.length>100)list.firstChild.remove()}status.textContent='En vivo · latencia '+(s.end_to_end_ms/1000).toFixed(2)+' s'});
+stream.addEventListener('subtitle',e=>{const s=JSON.parse(e.data);if(s.id<=last)return;last=s.id;partial.textContent='';for(const [list,text]of [[original,s.original],[spanish,s.spanish]]){const li=document.createElement('li');li.textContent=text;li.lang=list===spanish?'es':(['es','en'].includes(s.language)?s.language:'');list.append(li);while(list.children.length>100)list.firstChild.remove()}status.textContent='En vivo · latencia '+(s.end_to_end_ms/1000).toFixed(2)+' s'});
 stream.addEventListener('session',e=>{const s=JSON.parse(e.data);status.textContent=s.status==='failed'?'La transcripción se interrumpió.':'Charla finalizada';stream.close()});
 </script></html>

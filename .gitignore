@@ -63,3 +63,4 @@ credentials/
 *.ckpt
 *.pt
 *.pth
+.laya.env

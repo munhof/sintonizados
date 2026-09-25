@@ -78,7 +78,7 @@ func run() error {
 		defer f.Close()
 		source = f
 	}
-	body, _ := json.Marshal(map[string]string{"session_id": *sid, "title": *title, "language": "en"})
+	body, _ := json.Marshal(map[string]string{"session_id": *sid, "title": *title, "language": "auto"})
 	status, b, err := request("/api/sessions", "application/json", body, 0)
 	if err != nil {
 		return err
