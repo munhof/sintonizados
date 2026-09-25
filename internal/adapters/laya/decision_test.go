@@ -2,13 +2,16 @@ package laya
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
-	"github.com/munhof/sintonizados/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/munhof/sintonizados/internal/domain"
 )
 
 func TestOfficialMultilingualProtocol(t *testing.T) {
@@ -32,6 +35,68 @@ func TestOfficialMultilingualProtocol(t *testing.T) {
 	result, err := d.Decide(context.Background(), domain.DecisionRequest{Stage: "classify", Segment: domain.TranscriptSegment{Text: "Hello world"}})
 	if err != nil || result.Language != "en" || result.LanguageConfidence != 0.94 || !result.RequiresTranslation {
 		t.Fatalf("%+v %v", result, err)
+	}
+}
+
+type staticIdentityToken string
+
+func (s staticIdentityToken) IDToken(context.Context, string) (string, error) {
+	return string(s), nil
+}
+
+func TestCloudRunIdentityAndLayaAPIKeyAreBothSent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Serverless-Authorization"); got != "Bearer google-id-token" {
+			t.Errorf("Cloud Run identity header = %q", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer laya-api-key" {
+			t.Errorf("Laya API key header = %q", got)
+		}
+		w.Write([]byte(`{"answers":{"language":{"choice":"en","probabilities":{"en":0.94}}}}`))
+	}))
+	defer server.Close()
+
+	d := LayaDecisionEngine{
+		URL:             server.URL,
+		APIKey:          "laya-api-key",
+		CloudAudience:   "https://sintonizados-laya.example.run.app",
+		IDTokenProvider: staticIdentityToken("google-id-token"),
+	}
+	_, err := d.Decide(context.Background(), domain.DecisionRequest{Stage: "classify", Segment: domain.TranscriptSegment{Text: "hello"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMetadataIDTokenProviderUsesAudienceAndCachesUntilExpiry(t *testing.T) {
+	var calls atomic.Int32
+	expires := time.Now().Add(10 * time.Minute).Unix()
+	payload, err := json.Marshal(map[string]int64{"exp": expires})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := "header." + base64.RawURLEncoding.EncodeToString(payload) + ".signature"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.URL.Path != "/identity" || r.URL.Query().Get("audience") != "https://laya.example.run.app" || r.URL.Query().Get("format") != "full" {
+			t.Errorf("identity request URL = %s", r.URL.String())
+		}
+		if r.Header.Get("Metadata-Flavor") != "Google" {
+			t.Errorf("metadata header = %q", r.Header.Get("Metadata-Flavor"))
+		}
+		w.Write([]byte(token))
+	}))
+	defer server.Close()
+
+	provider := &MetadataIDTokenProvider{Endpoint: server.URL + "/identity", Client: server.Client()}
+	for range 2 {
+		got, err := provider.IDToken(context.Background(), "https://laya.example.run.app")
+		if err != nil || got != token {
+			t.Fatalf("token = %q, err = %v", got, err)
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("metadata calls = %d, want one cached request", calls.Load())
 	}
 }
 func TestInvalidOrUnavailableLayaReturnsError(t *testing.T) {

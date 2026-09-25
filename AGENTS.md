@@ -76,6 +76,16 @@ Elegir el menor cambio necesario y justificar decisiones persistentes con ADR.
 - Actualizar el issue correspondiente si existe y el acceso está disponible;
   si falta acceso, dejar el resultado pendiente documentado en el plan MVP.
 
+## Cloud deployment
+
+Usar `scripts/cloud` para bootstrap, build, push, deploy, smoke, status y rollback;
+el deploy debe usar imágenes etiquetadas por SHA. GitHub Actions autentica con
+OIDC/WIF y no con claves JSON. Mantener el gateway en `max=1` hasta resolver el
+estado distribuido del issue #7. La salud de Laya no demuestra calidad lingüística:
+mantener abierto el issue #12 hasta contar con evaluación suficiente. Después de
+cambiar despliegue o IAM, actualizar `docs/operations/google-cloud.md`, la
+arquitectura/ADR aplicable, `docs/planning/mvp.md` y el issue #2 cuando corresponda.
+
 ## Contribuciones
 
 Conservar la licencia. Ejecutar `test`, `lint`, `openapi`, `smoke`, `contract` y

@@ -1,93 +1,260 @@
-# Google Cloud — integración preparada
+# Google Cloud — Cloud Run y GitHub CD
 
-No se ejecutó un despliegue remoto ni se probaron claves reales. El trabajo local
-no requiere cuentas. Para completar la aceptación con Google falta acceso humano
-a un proyecto con billing y a Gemini Developer API/Cloud Translation.
+El despliegue del MVP usa dos servicios Cloud Run en `southamerica-east1` y una
+imagen OCI por servicio. El gateway público conserva su estado sólo en memoria y
+queda limitado a una instancia; Laya es privado y recibe identidad de servicio.
+No hay VM, base de datos, broker ni worker pool.
 
-## Credenciales: qué autentica cada una
-
-| Credencial | Uso |
-| --- | --- |
-| Login gcloud de operador | Crear recursos, subir imagen y desplegar |
-| GEMINI_API_KEY | Gemini Developer API, WebSocket de transcripción |
-| GOOGLE_TRANSLATION_API_KEY | Cloud Translation Basic REST; restringir a esa API |
-| OPERATOR_TOKEN | Escrituras y métricas de Sintonizados; generar valor propio |
-| Service account runtime | Leer los tres secretos en Cloud Run, sin clave JSON |
-
-La implementación inicial de Google usa API keys, no ADC. Autenticarse con gcloud
-no reemplaza las dos claves de proveedores. No crear claves descargables de service
-accounts para este flujo. Las cuentas/cuotas/modelos deben estar habilitados en el
-proyecto elegido.
-
-## Autenticar y preparar
-
-```sh
-./scripts/dev gcloud auth login --no-launch-browser
-export GOOGLE_CLOUD_PROJECT=tu-proyecto
-export GOOGLE_CLOUD_REGION=us-central1
-./scripts/cloud init
+```mermaid
+flowchart LR
+  GH[GitHub Actions / CI verde] -->|OIDC / WIF| AR[Artifact Registry]
+  GH -->|deploy SHA| LR[Cloud Run: sintonizados-laya / privado]
+  GH -->|deploy SHA| GW[Cloud Run: sintonizados / público]
+  GW -->|Gemini y Translation keys| SM[Secret Manager]
+  LR -->|Laya API key| SM
+  GW -->|X-Serverless-Authorization: ID token\nAuthorization: LAYA_API_KEY| LR
 ```
 
-El CLI vive dentro de OCI; su login se guarda en el volumen local
-`sintonizados-gcloud`, nunca en Git. El operador necesita permisos para habilitar
-servicios, Artifact Registry, service accounts, IAM, Secret Manager y Cloud Run.
-Billing se habilita desde la cuenta del usuario. `init` crea repositorio OCI y
-service account del runtime; no despliega.
+## Proyecto y recursos
 
-Obtener las claves en Google AI Studio/Google Cloud y crear estos secretos mediante
-la consola de Secret Manager (pegar valores allí, no en comandos versionados):
+```text
+Project: sintonizados-509702
+Region: southamerica-east1
+Artifact Registry: southamerica-east1-docker.pkg.dev/sintonizados-509702/sintonizados
+Gateway: sintonizados
+Decision service: sintonizados-laya
+```
 
-- `sintonizados-operator-token`: token propio aleatorio.
-- `sintonizados-gemini-key`: clave Gemini.
-- `sintonizados-translation-key`: clave Cloud Translation Basic.
+El wrapper usa la cuenta autenticada dentro del volumen Podman `sintonizados-gcloud`.
+No requiere instalar gcloud, Go, Python o Java en el host. La región default está
+en el script y se puede cambiar con `GOOGLE_CLOUD_REGION`.
 
-También se puede usar `./scripts/dev gcloud secrets create NAME --data-file=/workspace/credentials/NAME`
-con un archivo local ignorado; no subir ese directorio. Si el secreto existe,
-usar `secrets versions add` en lugar de `create`.
+## Bootstrap idempotente
 
-## Imagen y servicio
+La sesión del operador necesita permisos para habilitar APIs, crear Artifact
+Registry, service accounts, IAM, Workload Identity Federation y Secret Manager.
+El proyecto debe tener billing. El bootstrap habilita sólo las APIs de este
+despliegue, crea recursos que falten y conserva los existentes:
 
 ```sh
-export IMAGE_TAG=mvp
-./scripts/cloud push
-./scripts/cloud deploy
+export GOOGLE_CLOUD_PROJECT=sintonizados-509702
+export GOOGLE_CLOUD_REGION=southamerica-east1
+./scripts/cloud bootstrap
+```
+
+`bootstrap` crea el repositorio `sintonizados`, las service accounts indicadas
+abajo y estos secretos si no existen:
+
+```text
+sintonizados-operator-token
+sintonizados-gemini-key
+sintonizados-translation-key
+sintonizados-laya-api-key
+```
+
+Si no tienen versiones, intenta cargar las tres primeras desde las variables
+homónimas de `.env` (o `SECRET_ENV_FILE`). Nunca imprime sus valores. Genera el
+token interno de Laya con bytes aleatorios y también lo carga sin mostrarlo. Si
+no hay valor local para una clave externa, agregar una versión desde Secret
+Manager; no pegar secretos en comandos, GitHub Variables, workflow o imagen.
+Bootstrap no rota versiones existentes.
+
+### Identidades y permisos
+
+| Service account | Uso | Permisos |
+| --- | --- | --- |
+| `sintonizados-runtime@PROJECT.iam.gserviceaccount.com` | Gateway | Secret Accessor únicamente en los cuatro secretos; Run Invoker sobre Laya |
+| `sintonizados-laya@PROJECT.iam.gserviceaccount.com` | Laya | Secret Accessor únicamente en `sintonizados-laya-api-key` |
+| `sintonizados-deployer@PROJECT.iam.gserviceaccount.com` | GitHub Actions | Run Admin y Service Usage Consumer en el proyecto; Artifact Registry Writer sólo en `sintonizados`; Service Account User sobre las dos identidades runtime; Run Invoker sobre Laya para su health check |
+
+El workflow no tiene Owner ni Editor. No se crean ni descargan claves JSON.
+`sintonizados-laya` no recibe credenciales de Gemini ni Translation. El acceso
+Laya de runtime se restringe además mediante Cloud Run IAM.
+
+## GitHub OIDC / Workload Identity Federation
+
+El bootstrap configura:
+
+```text
+Pool: github
+Provider: github-sintonizados
+Issuer: https://token.actions.githubusercontent.com/
+Repository ID: 1386560953 (munhof/sintonizados)
+Condition: repository + refs/heads/main + environment production
+Impersonated service account: sintonizados-deployer@PROJECT.iam.gserviceaccount.com
+```
+
+El principal del pool sólo puede impersonar el deployer. La condición del
+provider y la branch policy del Environment exigen `main` y `production`.
+El Environment no agrega una aprobación manual.
+
+GitHub Environment `production` tiene estas **variables**, no secretos:
+
+```text
+GCP_PROJECT_ID
+GCP_REGION
+GCP_WIF_PROVIDER
+GCP_DEPLOY_SERVICE_ACCOUNT
+```
+
+Las cuatro ya se preparan con `./scripts/cloud bootstrap` o se pueden volver a
+configurar con `./scripts/cloud github-config`. Gemini, Translation, operator y
+Laya keys permanecen en Secret Manager; no hay credenciales GCP en GitHub.
+
+## Imágenes y versiones
+
+El tag de cada despliegue es el SHA Git completo; el repositorio aplica
+inmutabilidad de tags, por lo que cada tag mantiene un único digest:
+
+```text
+southamerica-east1-docker.pkg.dev/PROJECT/sintonizados/gateway:GIT_SHA
+southamerica-east1-docker.pkg.dev/PROJECT/sintonizados/laya:GIT_SHA
+```
+
+No se publica `latest`. `bootstrap` activa `--immutable-tags` también en un
+repositorio existente. `push` verifica esa política y omite una imagen SHA que ya
+exista; el Cloud Run revision, digest de Artifact Registry y SHA se registran en
+los logs de CD. El rollback selecciona una revisión existente; no reconstruye la
+imagen antigua. Artifact Registry permite habilitar esta política en Docker y
+rechaza reasignar un tag inmutable ([documentación oficial](https://cloud.google.com/artifact-registry/docs/repositories/update-repo-settings)).
+
+## CI/CD
+
+`.github/workflows/ci.yml` sigue siendo el único CI y conserva sus verificaciones.
+`.github/workflows/deploy.yml` escucha la finalización de `verify` y sólo despliega
+una corrida `push` exitosa del propio `main`. `workflow_dispatch` también está
+disponible desde `main` y consulta que CI haya pasado para ese mismo SHA. El job
+usa GitHub Environment `production`, GitHub OIDC y `google-github-actions/auth`;
+no necesita key JSON.
+
+La misma lógica de despliegue está en `scripts/cloud`, que se usa tanto desde
+terminal (gcloud OCI autenticado) como desde Actions (gcloud del runner autenticado
+por WIF):
+
+```sh
+./scripts/cloud build all
+./scripts/cloud push all
+./scripts/cloud deploy all
 ./scripts/cloud status
 ```
 
-`push` obtiene un token efímero y lo pasa por stdin a Podman, con authfile temporal
-que se elimina. `deploy` otorga acceso a cada secreto al runtime y configura Cloud
-Run. No se invoca desde CI. Usa una instancia como objetivo, CPU siempre disponible
-para workers, 512 MiB, concurrencia 80 y timeout de 3600 s para SSE.
-La lectura es pública; escritura/métricas siguen requiriendo bearer de operador.
-El mínimo de una instancia y CPU permanente generan costo aun sin audiencia.
+`deploy all` publica los dos tags, despliega Laya, espera que Cloud Run esté Ready
+y que su `/health` autenticado reporte `multilingual`, y después despliega y prueba
+el gateway. En GitHub Actions, el despliegue se inicia automáticamente al pasar CI.
 
-El límite de instancias no garantiza continuidad de memoria: reemplazos y revisiones
-pueden coexistir transitoriamente. No hacer rollout durante una charla. Si eso no es
-aceptable, completar la arquitectura distribuida antes de usar Cloud Run en producción.
-Referencias: [deploy](https://docs.cloud.google.com/sdk/gcloud/reference/run/deploy),
-[secretos](https://docs.cloud.google.com/run/docs/configuring/services/secrets) y
-[afinidad](https://docs.cloud.google.com/run/docs/configuring/session-affinity).
+## Cloud Run y autenticación
 
-## Aceptación luego de autenticar
+| Servicio | IAM/entrada | CPU/RAM | Instancias min/max | Concurrencia | CPU |
+| --- | --- | --- | --- | --- | --- |
+| `sintonizados` | público para lectura; escrituras/métricas requieren `OPERATOR_TOKEN` | 1 / 1 GiB | 1 / 1 | 40 | siempre asignada |
+| `sintonizados-laya` | privado, sólo callers con `roles/run.invoker` | 2 / 4 GiB | 1 / 1 | 2 | siempre asignada |
 
-Configurar `.env` local con OPERATOR_TOKEN igual al secreto y dos archivos hablados.
+Gateway usa port 8080 y timeout 3600 s para SSE; Laya usa port 8000 y CPU con
+`LAYA_DEVICE=cpu`, `LAYA_MODELS=multilingual`, `LAYA_THREADS=2` y precarga.
+`MAX_SESSIONS=16`. No aumentar el máximo de gateway mientras `SessionStore` y
+`EventBus` sean locales: varias instancias pueden dividir el estado y sticky
+sessions no dan consistencia. Resolver [issue #7](https://github.com/munhof/sintonizados/issues/7)
+antes de escalar o hacer rollout durante una charla.
+
+En local, `LAYA_CLOUD_AUDIENCE` está vacío y continúa el bearer Laya opcional. En
+Cloud Run, el gateway pide a Metadata Server un ID token ADC para el audience de
+Laya y lo envía en `X-Serverless-Authorization`; `Authorization: Bearer ...`
+conserva `LAYA_API_KEY` para el servicio Laya. Los dos encabezados cubren capas
+distintas. El adapter de Go no depende de un archivo de service account.
+
+Se puede degradar sin recompilar/desplegar una imagen nueva, creando una revisión
+de configuración:
 
 ```sh
-ENV_FILE=.env ./scripts/dev feed -url https://URL-DEL-SERVICIO -session real-a -title 'Charla A' -file /data/a.pcm &
-pid_a=$!
-ENV_FILE=.env ./scripts/dev feed -url https://URL-DEL-SERVICIO -session real-b -title 'Charla B' -file /data/b.pcm &
-pid_b=$!
-wait "$pid_a"
-wait "$pid_b"
+DECISION_ENGINE=deterministic ./scripts/cloud deploy gateway
 ```
 
-Verificar ambas páginas, originales, traducción, errores y timestamps; guardar
-resultados sin secretos en `docs/planning/mvp.md`. No sustituir esta prueba por el
-modo demo ni por los mocks. Modelo Live con ventana de 9 minutos en el adaptador;
-reconexión/renovación automática queda pendiente.
+Esto conserva Google Translation con autodetección; no demuestra clasificación
+Laya. La clasificación real sigue sin estar validada en [issue #12](https://github.com/munhof/sintonizados/issues/12).
 
-## GitHub CI
+## Laya y pesos
 
-`.github/workflows/ci.yml` no necesita secretos de Google y corre en push/PR. El
-bootstrap deja el workflow listo; su ejecución remota requiere publicar los cambios
-con una identidad GitHub autorizada. No se ha comprobado una corrida remota.
+Se verificó el model card oficial: Apache 2.0; `laya-multilingual` indica 322 M
+parámetros y su archivo `model.safetensors` ocupa 644 MB ([model card](https://huggingface.co/convaiinnovations/laya-multilingual), [archivos](https://huggingface.co/convaiinnovations/laya-multilingual/tree/main)).
+La imagen OCI instalada localmente mide 1.31 GB. Para el MVP, se mantiene la
+descarga de pesos por upstream al iniciar con `min=1`: evita añadir otros 644 MB
+a la imagen y no agrega almacenamiento. El despliegue mide el tiempo hasta Ready.
+El código upstream está fijado, pero el snapshot de Hugging Face no se fuerza en
+un cache nuevo; se observó `55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851`. Por eso
+la imagen es inmutable por SHA, mientras que la descarga inicial del modelo aún
+es una limitación de reproducibilidad. No se predescargan pesos hasta verificar
+el inicio real de Cloud Run.
+
+Un `/health` exitoso con el modelo cargado sólo valida disponibilidad técnica.
+El checkpoint real dio `unknown` en tres ejemplos claros; no afirmar calidad de
+idioma. Ver [operación Laya](laya.md) y #12. No se despliega VM: el primer intento
+es Cloud Run y sólo se evaluaría otra plataforma con evidencia de límites reales.
+
+## Estado y observabilidad
+
+```sh
+./scripts/cloud status
+./scripts/dev gcloud run services describe sintonizados --region=southamerica-east1
+./scripts/dev gcloud run revisions list --service=sintonizados --region=southamerica-east1
+./scripts/dev gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="sintonizados"' --limit=100
+```
+
+`/health` indica liveness y modo, no validez de claves o conectividad con Gemini.
+Los logs del gateway registran session IDs y latencias por subtítulo, sin audio,
+transcripción ni claves. Cloud Monitoring ofrece consumo de CPU/memoria por
+revisión; verificar después de ejecutar pruebas reales. `laya_deploy_to_ready_seconds`
+es elapsed desde `gcloud run deploy` hasta health con multilingual cargado; incluye
+control plane y no es sólo tiempo del proceso.
+
+## Health y pruebas fuera de localhost
+
+El CD comprueba Laya `/health` autenticado, Gateway `/health`, página principal y
+listado público de sesiones desde el runner de GitHub. Para comprobar el flujo SSE
+de una sesión existente:
+
+```sh
+SMOKE_SESSION_ID=charla-a ./scripts/cloud smoke gateway
+```
+
+La aceptación de issue #2 también requiere crear sesión, ver SSE desde navegador
+externo y probar dos flujos con audio real. No usar `demo` para dar por probados
+Gemini, Translation, Laya o dos charlas reales. El gateway mantiene la retención
+en memoria actual; sus reinicios/revisiones pueden perder sesiones.
+
+## Rollback
+
+Listar revisiones y elegir una que ya exista:
+
+```sh
+GOOGLE_CLOUD_PROJECT=PROJECT ./scripts/dev gcloud run revisions list --service=sintonizados --region=southamerica-east1
+GOOGLE_CLOUD_PROJECT=PROJECT ./scripts/cloud rollback gateway sintonizados-REVISION
+GOOGLE_CLOUD_PROJECT=PROJECT ./scripts/cloud rollback laya sintonizados-laya-REVISION
+```
+
+El servicio vuelve a enviar 100% del tráfico a esa revisión. Confirmar URL,
+health, SSE y logs. Los cambios de configuración también crean revisiones, por lo
+que documentar el SHA no identifica por sí solo variables/secrets de runtime.
+
+## Costos y teardown
+
+Min instances 1 y CPU siempre asignada mantienen una instancia de cada servicio
+activa aun sin público. Laya usa 2 vCPU y 4 GiB; el gateway 1 vCPU y 1 GiB. También
+se factura el almacenamiento de dos imágenes por commit. El costo depende del
+tiempo, región y volumen de registros; revisar Billing antes de dejarlo encendido
+fuera de la demo.
+
+Para conservar servicios y configuración pero permitir scale-to-zero:
+
+```sh
+GOOGLE_CLOUD_PROJECT=PROJECT ./scripts/cloud scale-down
+```
+
+Para apagar y eliminar sólo los dos servicios Cloud Run (mantiene Artifact
+Registry, secretos, IAM y WIF):
+
+```sh
+GOOGLE_CLOUD_PROJECT=PROJECT ./scripts/cloud destroy-demo --confirm
+```
+
+El teardown no forma parte del CI. No hay `VM` que apagar. Secretos nunca se borran
+con este comando; borrarlos requiere una acción separada y deliberada.

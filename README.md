@@ -161,6 +161,7 @@ La semántica del audio y SSE está en [api/README.md](api/README.md).
 | `DECISION_ENGINE` | `deterministic`; `laya` activa clasificación por fragmento |
 | `LAYA_URL` | `http://sintonizados-laya:8000`; servidor oficial independiente |
 | `LAYA_API_KEY` | Opcional, bearer compartido Laya ↔ gateway; no es una clave Google |
+| `LAYA_CLOUD_AUDIENCE` | Vacía en local; en Cloud Run es la URL de Laya para ID token de runtime |
 | `LAYA_ENV_FILE` | Opcional env-file separado para Laya, por ejemplo `.laya.env` |
 | `ENV_FILE` | Wrapper local: `.env.example`; usar `.env` para credenciales |
 
@@ -176,10 +177,20 @@ La imagen usa `Containerfile`, usuario sin privilegios y un runtime sin shell.
 No necesita Compose, Kubernetes ni un broker externo.
 
 El estado de sesiones del MVP pertenece a **un proceso Go**; Laya es un servicio
-separado. Aumentar réplicas con memoria local pierde la
-coherencia; la afinidad no lo resuelve. Cloud Run se prepara como demo de instancia
-única, con las limitaciones detalladas en la documentación. **No hay despliegue
-remoto verificado**.
+separado. Aumentar réplicas con memoria local pierde la coherencia; la afinidad no
+lo resuelve. El despliegue reproducible en Google Cloud usa Cloud Run con una
+instancia de gateway. El procedimiento, permisos, rollback y apagado están en
+[operación Google Cloud](docs/operations/google-cloud.md).
+
+```sh
+GOOGLE_CLOUD_PROJECT=sintonizados-509702 ./scripts/cloud status
+GOOGLE_CLOUD_PROJECT=sintonizados-509702 ./scripts/cloud deploy all
+```
+
+GitHub Actions despliega el SHA de `main` después de CI `verify` exitoso;
+`workflow_dispatch` permite repetirlo manualmente desde `main`. Un health check
+correcto no implica que Laya clasifique bien el idioma: esa calidad sigue
+pendiente en el [issue #12](https://github.com/munhof/sintonizados/issues/12).
 
 ## Planificado
 

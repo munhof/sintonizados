@@ -20,3 +20,4 @@
 - [0018 — Conector OBS mediante RTMP y overlay Browser Source](0018-obs-rtmp.md)
 
 - [0019 — Laya Multilingual e idioma por fragmento](0019-laya-segment-language.md)
+- [0020 — Cloud Run y GitHub WIF](0020-cloud-run-wif-deployment.md)

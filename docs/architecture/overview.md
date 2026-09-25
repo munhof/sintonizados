@@ -37,6 +37,26 @@ del dominio. No se genera servidor Go desde Smithy.
 | `internal/adapters/http` | DTO, validación de entrada, auth y vistas embebidas |
 | `api/smithy` | Contrato público; no importado por el dominio |
 
+## Runtime Google Cloud
+
+```mermaid
+flowchart LR
+  Audience[Audiencia pública] --> GW[Cloud Run / Go gateway / max 1]
+  GW --> SM[Secret Manager / credenciales gateway]
+  GW -->|ID token Cloud Run + API key Laya| L[Cloud Run / Laya privado / max 1]
+  L --> LS[Secret Manager / API key Laya]
+  Actions[GitHub Actions / CI verde] -->|OIDC + WIF, main + production| D[Deployer service account]
+  D --> AR[Artifact Registry / tags SHA]
+  D --> GW
+  D --> L
+```
+
+La distribución e IAM de estas dos instancias están descritas en
+[deployment](deployment.md) y [operación Google Cloud](../operations/google-cloud.md).
+El gateway es de lectura pública; escrituras exigen `OPERATOR_TOKEN`. Laya sólo
+acepta la identidad runtime del gateway y su bearer propio. Los dos servicios
+tienen min/max de una instancia hasta implementar el store y bus distribuidos.
+
 Memoria y bus son deliberadamente locales. Reemplazar sólo el store no basta
 para múltiples réplicas: hay que resolver ownership del stream, secuencias,
 entrega durable y fanout. Ver [sesiones](sessions.md) y [eventos](events.md).

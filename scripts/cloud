@@ -1,40 +1,370 @@
 #!/bin/sh
-# Explicit operator commands; nothing deploys as part of local development or CI.
 set -eu
 cd "$(dirname "$0")/.."
-: "${GOOGLE_CLOUD_PROJECT:?Set GOOGLE_CLOUD_PROJECT}"
-region=${GOOGLE_CLOUD_REGION:-us-central1}
+
+command=${1:-help}
+[ "$#" -eq 0 ] || shift
+project=${GOOGLE_CLOUD_PROJECT:-}
+region=${GOOGLE_CLOUD_REGION:-southamerica-east1}
 repository=sintonizados
-service=sintonizados
-account="sintonizados-runtime@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com"
-image="${region}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/${repository}/gateway:${IMAGE_TAG:-mvp}"
-gcloud() {
- podman run --rm -v sintonizados-gcloud:/root/.config/gcloud -v "$PWD:/workspace:Z" -w /workspace gcr.io/google.com/cloudsdktool/google-cloud-cli:stable gcloud --project "$GOOGLE_CLOUD_PROJECT" "$@"
+repo_slug=munhof/sintonizados
+gateway_service=sintonizados
+laya_service=sintonizados-laya
+runtime_sa="sintonizados-runtime@${project}.iam.gserviceaccount.com"
+laya_sa="sintonizados-laya@${project}.iam.gserviceaccount.com"
+deployer_sa="sintonizados-deployer@${project}.iam.gserviceaccount.com"
+gcloud_image=gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+registry="${region}-docker.pkg.dev"
+
+fail() { printf '%s\n' "$*" >&2; exit 1; }
+require_project() { [ -n "$project" ] || fail 'Set GOOGLE_CLOUD_PROJECT to the selected project ID.'; }
+require_sha() {
+	case "$git_sha" in *[!0-9a-f]*|'') fail 'GIT_SHA must be a full lowercase Git commit SHA.' ;; esac
+	[ "${#git_sha}" -eq 40 ] || fail 'GIT_SHA must contain 40 hexadecimal characters.'
 }
-case "${1:-help}" in
- init)
-  gcloud services enable run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com translate.googleapis.com generativelanguage.googleapis.com
-  gcloud artifacts repositories describe "$repository" --location "$region" >/dev/null 2>&1 || gcloud artifacts repositories create "$repository" --location "$region" --repository-format docker
-  gcloud iam service-accounts describe "$account" >/dev/null 2>&1 || gcloud iam service-accounts create sintonizados-runtime --display-name 'Sintonizados runtime'
-  ;;
- push)
-  podman build -t "$image" .
-  authfile=$(mktemp /tmp/sintonizados-registry-XXXXXX)
-  printf '{}\n' > "$authfile"
-  trap 'rm -f "$authfile"' EXIT INT TERM
-  gcloud auth print-access-token | podman login --authfile "$authfile" -u oauth2accesstoken --password-stdin "${region}-docker.pkg.dev"
-  podman push --authfile "$authfile" "$image"
-  ;;
- deploy)
-  for secret in sintonizados-operator-token sintonizados-gemini-key sintonizados-translation-key; do
-   gcloud secrets add-iam-policy-binding "$secret" --member "serviceAccount:$account" --role roles/secretmanager.secretAccessor >/dev/null
-  done
-  gcloud run deploy "$service" --image "$image" --region "$region" --service-account "$account" \
-    --allow-unauthenticated --port 8080 --cpu 1 --memory 512Mi --concurrency 80 \
-    --min 1 --max 1 --max-instances 1 --no-cpu-throttling --timeout 3600 \
-    --set-env-vars 'PROVIDER_MODE=google,MAX_SESSIONS=16,GEMINI_MODEL=gemini-3.5-transcribe-live' \
-    --set-secrets 'OPERATOR_TOKEN=sintonizados-operator-token:latest,GEMINI_API_KEY=sintonizados-gemini-key:latest,GOOGLE_TRANSLATION_API_KEY=sintonizados-translation-key:latest'
-  ;;
- status) gcloud run services describe "$service" --region "$region" --format='value(status.url)' ;;
- *) printf '%s\n' 'Usage: GOOGLE_CLOUD_PROJECT=... ./scripts/cloud {init|push|deploy|status}' ;;
+git_sha=${GIT_SHA:-$(git rev-parse HEAD)}
+
+gcloud() {
+	require_project
+	if [ "${GITHUB_ACTIONS:-false}" = true ]; then
+		command gcloud --project "$project" "$@"
+	else
+		podman run --rm -i \
+			-v sintonizados-gcloud:/root/.config/gcloud \
+			-v "$PWD:/workspace:Z" -w /workspace \
+			"$gcloud_image" gcloud --project "$project" "$@"
+	fi
+}
+
+local_image() { printf 'localhost/sintonizados-%s:%s' "$1" "$git_sha"; }
+remote_image() { printf '%s/%s/%s:%s' "$registry" "$project" "$repository/$1" "$git_sha"; }
+build_image() {
+	component=$1
+	case "$component" in
+		gateway) file=Containerfile ;;
+		laya) file=containers/Laya.Containerfile ;;
+		*) fail "Unknown image component: $component" ;;
+	esac
+	require_sha
+	podman build --file "$file" --tag "$(local_image "$component")" .
+}
+assert_clean_source() {
+	[ -z "$(git status --porcelain --untracked-files=all)" ] || fail 'Push/deploy requires a clean worktree so the image matches its Git SHA.'
+}
+push_image() {
+	component=$1
+	require_project
+	require_sha
+	assert_clean_source
+	target=$(remote_image "$component")
+	immutable=$(gcloud artifacts repositories describe "$repository" --location="$region" --format='value(dockerConfig.immutableTags)' | tr '[:upper:]' '[:lower:]')
+	[ "$immutable" = true ] || fail 'Artifact Registry tags must be immutable; run ./scripts/cloud bootstrap first.'
+	if gcloud artifacts docker images describe "$target" --quiet >/dev/null 2>&1; then
+		printf 'already_published=%s\n' "$target"
+		return
+	fi
+	image=$(local_image "$component")
+	if ! podman image exists "$image"; then build_image "$component"; fi
+	authfile=$(mktemp /tmp/sintonizados-registry-XXXXXX)
+	printf '{}\n' > "$authfile"
+	trap 'rm -f "$authfile"' EXIT HUP INT TERM
+	gcloud auth print-access-token | podman login --authfile "$authfile" --username oauth2accesstoken --password-stdin "$registry"
+	podman tag "$image" "$target"
+	podman push --authfile "$authfile" "$target"
+	rm -f "$authfile"
+	trap - EXIT HUP INT TERM
+	printf 'pushed=%s\n' "$target"
+}
+
+ensure_secret_resource() {
+	name=$1
+	if ! gcloud secrets describe "$name" --quiet >/dev/null 2>&1; then
+		gcloud secrets create "$name" --replication-policy=automatic --quiet >/dev/null
+	fi
+}
+secret_has_version() {
+	versions=$(gcloud secrets versions list "$1" --filter='state=ENABLED' --limit=1 --format='value(name)' 2>/dev/null || true)
+	[ -n "$versions" ]
+}
+env_key_exists() {
+	file=$1
+	key=$2
+	awk -v key="$key" '
+		{ line=$0; sub(/^[[:space:]]*/, "", line); prefix="export " key "=";
+		  if (index(line, key "=")==1 || index(line, prefix)==1) { found=1; value=line; sub(/^export[[:space:]]+/, "", value); sub(/^[^=]*=/, "", value); if (value!="") exit } }
+		END { if (!found || value=="") exit 1 }
+	' "$file" >/dev/null 2>&1
+}
+env_key_value() {
+	file=$1
+	key=$2
+	awk -v key="$key" '
+		{ line=$0; sub(/^[[:space:]]*/, "", line); prefix="export " key "=";
+		  if (index(line, prefix)==1) line=substr(line, 8);
+		  if (index(line, key "=")==1) { value=substr(line, length(key)+2); first=substr(value,1,1); last=substr(value,length(value),1);
+		    if ((first=="\"" && last=="\"") || (first==sprintf("%c",39) && last==sprintf("%c",39))) value=substr(value,2,length(value)-2);
+		    found=1; if (value!="") printf "%s", value; exit } }
+		END { if (!found || value=="") exit 1 }
+	' "$file"
+}
+seed_env_secret() {
+	secret=$1
+	key=$2
+	if secret_has_version "$secret"; then return; fi
+	file=${SECRET_ENV_FILE:-.env}
+	[ -f "$file" ] || fail "Secret $secret has no value; add $key to $file or create a Secret Manager version."
+	env_key_exists "$file" "$key" || fail "Secret $secret has no version and $key is absent from $file; add it directly in Secret Manager."
+	env_key_value "$file" "$key" | gcloud secrets versions add "$secret" --data-file=- --quiet >/dev/null
+	printf 'initialized_secret=%s from local env file (value not displayed)\n' "$secret"
+}
+seed_random_secret() {
+	secret=$1
+	if secret_has_version "$secret"; then return; fi
+	head -c 48 /dev/urandom | base64 | tr -d '\n' | gcloud secrets versions add "$secret" --data-file=- --quiet >/dev/null
+	printf 'initialized_secret=%s with generated random value (value not displayed)\n' "$secret"
+}
+bind_project_role() {
+	gcloud projects add-iam-policy-binding "$project" --member="serviceAccount:$deployer_sa" --role="$1" --condition=None --quiet >/dev/null
+}
+bind_secret() {
+	gcloud secrets add-iam-policy-binding "$1" --member="serviceAccount:$2" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
+}
+
+bootstrap_gcp() {
+	require_project
+	for api in \
+		run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com \
+		translate.googleapis.com generativelanguage.googleapis.com iam.googleapis.com \
+		iamcredentials.googleapis.com sts.googleapis.com cloudresourcemanager.googleapis.com \
+		serviceusage.googleapis.com monitoring.googleapis.com logging.googleapis.com; do
+		gcloud services enable "$api" --quiet
+	done
+	if ! gcloud artifacts repositories describe "$repository" --location="$region" --quiet >/dev/null 2>&1; then
+		gcloud artifacts repositories create "$repository" --location="$region" --repository-format=docker --immutable-tags --description='Sintonizados OCI images' --quiet
+	else
+		gcloud artifacts repositories update "$repository" --location="$region" --immutable-tags --quiet
+	fi
+	for item in 'sintonizados-runtime:Runtime gateway' 'sintonizados-laya:Laya inference runtime' 'sintonizados-deployer:GitHub Actions deployer'; do
+		name=${item%%:*}
+		display=${item#*:}
+		if ! gcloud iam service-accounts describe "$name@$project.iam.gserviceaccount.com" --quiet >/dev/null 2>&1; then
+			gcloud iam service-accounts create "$name" --display-name="$display" --quiet
+		fi
+	done
+	for name in sintonizados-operator-token sintonizados-gemini-key sintonizados-translation-key sintonizados-laya-api-key; do
+		ensure_secret_resource "$name"
+	done
+	seed_env_secret sintonizados-operator-token OPERATOR_TOKEN
+	seed_env_secret sintonizados-gemini-key GEMINI_API_KEY
+	seed_env_secret sintonizados-translation-key GOOGLE_TRANSLATION_API_KEY
+	seed_random_secret sintonizados-laya-api-key
+	for name in sintonizados-operator-token sintonizados-gemini-key sintonizados-translation-key sintonizados-laya-api-key; do
+		bind_secret "$name" "$runtime_sa"
+	done
+	bind_secret sintonizados-laya-api-key "$laya_sa"
+	bind_project_role roles/run.admin
+	bind_project_role roles/serviceusage.serviceUsageConsumer
+	gcloud artifacts repositories add-iam-policy-binding "$repository" --location="$region" --member="serviceAccount:$deployer_sa" --role=roles/artifactregistry.writer --quiet >/dev/null
+	for account in "$runtime_sa" "$laya_sa"; do
+		gcloud iam service-accounts add-iam-policy-binding "$account" --member="serviceAccount:$deployer_sa" --role=roles/iam.serviceAccountUser --quiet >/dev/null
+	done
+	if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+		configure_wif
+	else
+		printf '%s\n' 'Google resources and runtime secrets are ready; GitHub WIF remains pending gh auth login. Run ./scripts/cloud github-config after authenticating.'
+	fi
+}
+
+configure_wif() {
+	require_project
+	command -v gh >/dev/null 2>&1 || fail 'GitHub CLI is required for WIF repository restriction and variables.'
+	gh auth status >/dev/null 2>&1 || fail 'Run gh auth login before ./scripts/cloud github-config.'
+	repository_id=$(gh api "repos/$repo_slug" --jq '.id')
+	project_number=$(gcloud projects describe "$project" --format='value(projectNumber)')
+	provider_path="projects/$project_number/locations/global/workloadIdentityPools/github/providers/github-sintonizados"
+	condition="assertion.repository_id == '$repository_id' && assertion.repository == '$repo_slug' && assertion.ref == 'refs/heads/main' && assertion.environment == 'production'"
+	mapping='google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.repository=assertion.repository,attribute.ref=assertion.ref,attribute.environment=assertion.environment'
+	if ! gcloud iam workload-identity-pools describe github --location=global --quiet >/dev/null 2>&1; then
+		gcloud iam workload-identity-pools create github --location=global --display-name='GitHub Actions for Sintonizados' --description='Restricted to munhof/sintonizados main production deployments' --quiet
+	fi
+	if gcloud iam workload-identity-pools providers describe github-sintonizados --location=global --workload-identity-pool=github --quiet >/dev/null 2>&1; then
+		gcloud iam workload-identity-pools providers update-oidc github-sintonizados --location=global --workload-identity-pool=github --issuer-uri=https://token.actions.githubusercontent.com/ --attribute-mapping="$mapping" --attribute-condition="$condition" --quiet
+	else
+		gcloud iam workload-identity-pools providers create-oidc github-sintonizados --location=global --workload-identity-pool=github --issuer-uri=https://token.actions.githubusercontent.com/ --attribute-mapping="$mapping" --attribute-condition="$condition" --display-name='GitHub Sintonizados production' --quiet
+	fi
+	principal="principalSet://iam.googleapis.com/projects/$project_number/locations/global/workloadIdentityPools/github/attribute.repository_id/$repository_id"
+	gcloud iam service-accounts add-iam-policy-binding "$deployer_sa" --member="$principal" --role=roles/iam.workloadIdentityUser --quiet >/dev/null
+	configure_github "$provider_path"
+}
+
+configure_github() {
+	provider_path=$1
+	printf '%s' '{"wait_timer":0,"can_admins_bypass":false,"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' |
+		gh api --method PUT "repos/$repo_slug/environments/production" --input - >/dev/null
+	branch_policy=$(gh api "repos/$repo_slug/environments/production/deployment-branch-policies" --jq 'any(.branch_policies[]; .name == "main")')
+	if [ "$branch_policy" != true ]; then
+		printf '%s' '{"name":"main"}' | gh api --method POST "repos/$repo_slug/environments/production/deployment-branch-policies" --input - >/dev/null
+	fi
+	gh variable set GCP_PROJECT_ID --repo "$repo_slug" --env production --body "$project"
+	gh variable set GCP_REGION --repo "$repo_slug" --env production --body "$region"
+	gh variable set GCP_WIF_PROVIDER --repo "$repo_slug" --env production --body "$provider_path"
+	gh variable set GCP_DEPLOY_SERVICE_ACCOUNT --repo "$repo_slug" --env production --body "$deployer_sa"
+	printf 'GitHub environment production is restricted to main; WIF provider=%s\n' "$provider_path"
+}
+
+image_record() {
+	component=$1
+	image=$(remote_image "$component")
+	digest=$(gcloud artifacts docker images describe "$image" --format='value(image_summary.digest)')
+	service=$gateway_service
+	[ "$component" = gateway ] || service=$laya_service
+	revision=$(gcloud run services describe "$service" --region="$region" --format='value(status.latestReadyRevisionName)')
+	url=$(gcloud run services describe "$service" --region="$region" --format='value(status.url)')
+	printf 'service=%s\ncommit=%s\nimage=%s\ndigest=%s\nrevision=%s\nurl=%s\n' "$service" "$git_sha" "$image" "$digest" "$revision" "$url"
+}
+service_url() {
+	case "$1" in
+		gateway) service=$gateway_service ;;
+		laya) service=$laya_service ;;
+		*) fail 'Usage: scripts/cloud url {gateway|laya}' ;;
+	esac
+	gcloud run services describe "$service" --region="$region" --format='value(status.url)'
+}
+deploy_laya() {
+	require_project
+	require_sha
+	assert_clean_source
+	image=$(remote_image laya)
+	started=$(date +%s)
+	gcloud run deploy "$laya_service" --image "$image" --region="$region" --service-account "$laya_sa" \
+		--no-allow-unauthenticated --port 8000 --cpu 2 --memory 4Gi --concurrency 2 \
+		--min 1 --max 1 --no-cpu-throttling --timeout 300 \
+		--set-env-vars 'LAYA_MODELS=multilingual,LAYA_DEVICE=cpu,LAYA_THREADS=2,LAYA_PRELOAD=1' \
+		--set-secrets 'LAYA_API_KEY=sintonizados-laya-api-key:latest' --quiet
+	gcloud run services add-iam-policy-binding "$laya_service" --region="$region" --member="serviceAccount:$runtime_sa" --role=roles/run.invoker --quiet >/dev/null
+	gcloud run services add-iam-policy-binding "$laya_service" --region="$region" --member="serviceAccount:$deployer_sa" --role=roles/run.invoker --quiet >/dev/null
+	./scripts/cloud smoke laya
+	ended=$(date +%s)
+	printf 'laya_deploy_to_ready_seconds=%s\n' "$((ended-started))"
+	image_record laya
+}
+deploy_gateway() {
+	require_project
+	require_sha
+	assert_clean_source
+	decision=${DECISION_ENGINE:-laya}
+	case "$decision" in laya|deterministic) ;; *) fail 'DECISION_ENGINE must be laya or deterministic.' ;; esac
+	laya_url=${LAYA_URL:-$(service_url laya)}
+	image=$(remote_image gateway)
+	gcloud run deploy "$gateway_service" --image "$image" --region="$region" --service-account "$runtime_sa" \
+		--allow-unauthenticated --port 8080 --cpu 1 --memory 1Gi --concurrency 40 \
+		--min 1 --max 1 --no-cpu-throttling --timeout 3600 \
+		--set-env-vars "PROVIDER_MODE=google,MAX_SESSIONS=16,GEMINI_MODEL=gemini-3.5-transcribe-live,DECISION_ENGINE=$decision,LAYA_URL=$laya_url,LAYA_CLOUD_AUDIENCE=$laya_url" \
+		--set-secrets 'OPERATOR_TOKEN=sintonizados-operator-token:latest,GEMINI_API_KEY=sintonizados-gemini-key:latest,GOOGLE_TRANSLATION_API_KEY=sintonizados-translation-key:latest,LAYA_API_KEY=sintonizados-laya-api-key:latest' --quiet
+	./scripts/cloud smoke gateway
+	image_record gateway
+}
+smoke_laya() {
+	url=$(service_url laya)
+	token=$(gcloud auth print-identity-token --audiences="$url" --include-email)
+	response=$(curl --fail --silent --show-error --max-time 15 -H "X-Serverless-Authorization: Bearer $token" "$url/health") || fail 'Private Laya /health request failed.'
+	unset token
+	printf '%s' "$response" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' || fail 'Laya health status was not ok.'
+	printf '%s' "$response" | grep -q 'multilingual' || fail 'Laya health did not report the multilingual model loaded.'
+	printf '%s\n' 'laya_private_health=ok model_loaded=multilingual'
+}
+smoke_gateway() {
+	url=$(service_url gateway)
+	health=$(curl --fail --silent --show-error --max-time 15 "$url/health") || fail 'Public gateway /health request failed.'
+	printf '%s' "$health" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' || fail 'Gateway health status was not ok.'
+	home=$(curl --fail --silent --show-error --max-time 15 "$url/") || fail 'Gateway home page request failed.'
+	printf '%s' "$home" | grep -q 'Sintonizados' || fail 'Gateway home page did not contain Sintonizados.'
+	curl --fail --silent --show-error --max-time 15 -o /dev/null "$url/api/sessions" || fail 'Public session list request failed.'
+	printf '%s\n' 'gateway_health=ok public_home=ok public_session_list=ok'
+	if [ -n "${SMOKE_SESSION_ID:-}" ]; then
+		sse_status=$(curl --silent --max-time 3 -o /dev/null -w '%{http_code}' "$url/api/sessions/$SMOKE_SESSION_ID/events" 2>/dev/null || true)
+		[ "$sse_status" = 200 ] || fail "Public SSE endpoint returned HTTP ${sse_status:-000}."
+		printf '%s\n' 'gateway_sse=200'
+	fi
+}
+status() {
+	require_project
+	for service in "$gateway_service" "$laya_service"; do
+		if values=$(gcloud run services describe "$service" --region="$region" --format='value(status.url,status.latestReadyRevisionName,spec.template.spec.containers[0].image)' 2>/dev/null); then
+			printf '%s\t%s\n' "$service" "$values"
+		else
+			printf '%s\t%s\n' "$service" 'not deployed'
+		fi
+	done
+}
+rollback() {
+	service=$1
+	revision=$2
+	case "$service" in gateway) service=$gateway_service ;; laya) service=$laya_service ;; *) fail 'Usage: scripts/cloud rollback {gateway|laya} REVISION' ;; esac
+	[ -n "$revision" ] || fail 'A Cloud Run revision name is required.'
+	gcloud run services update-traffic "$service" --region="$region" --to-revisions="$revision=100" --quiet
+}
+
+case "$command" in
+	bootstrap) bootstrap_gcp ;;
+	github-config) configure_wif ;;
+	build)
+		component=${1:-all}
+		case "$component" in gateway|laya) build_image "$component" ;; all) build_image gateway; build_image laya ;; *) fail 'Usage: scripts/cloud build {gateway|laya|all}' ;; esac
+		;;
+	push)
+		component=${1:-all}
+		case "$component" in gateway|laya) push_image "$component" ;; all) push_image gateway; push_image laya ;; *) fail 'Usage: scripts/cloud push {gateway|laya|all}' ;; esac
+		;;
+	deploy)
+		component=${1:-all}
+		case "$component" in
+			laya) deploy_laya ;;
+			gateway) deploy_gateway ;;
+			all)
+				push_image laya
+				push_image gateway
+				deploy_laya
+				deploy_gateway
+				;;
+			*) fail 'Usage: scripts/cloud deploy {gateway|laya|all}' ;;
+		esac
+		;;
+	smoke)
+		component=${1:-gateway}
+		case "$component" in gateway) smoke_gateway ;; laya) smoke_laya ;; all) smoke_laya; smoke_gateway ;; *) fail 'Usage: scripts/cloud smoke {gateway|laya|all}' ;; esac
+		;;
+	status) status ;;
+	url) service_url "${1:-gateway}" ;;
+	rollback) rollback "${1:-}" "${2:-}" ;;
+	scale-down)
+		gcloud run services update "$gateway_service" --region="$region" --min 0 --cpu-throttling --quiet
+		gcloud run services update "$laya_service" --region="$region" --min 0 --cpu-throttling --quiet
+		;;
+	destroy-demo)
+		[ "${1:-}" = --confirm ] || fail 'This deletes only the two Cloud Run services. Re-run with --confirm; secrets and Artifact Registry are retained.'
+		gcloud run services delete "$gateway_service" --region="$region" --quiet
+		gcloud run services delete "$laya_service" --region="$region" --quiet
+		;;
+	help|-h|--help)
+		cat <<'EOF'
+Usage: GOOGLE_CLOUD_PROJECT=... [GOOGLE_CLOUD_REGION=southamerica-east1] ./scripts/cloud COMMAND
+
+  bootstrap                    create Google resources, secrets and WIF/GitHub config
+  github-config                configure WIF provider, production environment and variables
+  build {gateway|laya|all}     build OCI images with Podman
+  push {gateway|laya|all}      push immutable GIT_SHA tags to Artifact Registry
+  deploy {gateway|laya|all}   deploy; all pushes, deploys Laya, checks it, then deploys gateway
+  smoke {gateway|laya|all}     verify public gateway or authenticated private Laya health
+  status                       show service URLs, ready revisions and deployed images
+  url {gateway|laya}           print a service URL
+  rollback {gateway|laya} REV  route all traffic to an existing revision
+  scale-down                   set min instances to zero and restore request-based CPU
+  destroy-demo --confirm       delete only the two Cloud Run services; keep secrets/images/IAM
+
+Local gcloud runs in the Google Cloud CLI OCI image using sintonizados-gcloud.
+GitHub Actions uses its WIF-authenticated gcloud binary. No service account keys are used.
+EOF
+		;;
+	*) fail 'Unknown command; run ./scripts/cloud help.' ;;
 esac

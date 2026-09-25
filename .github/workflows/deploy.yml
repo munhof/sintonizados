@@ -1,0 +1,86 @@
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [verify]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment:
+      name: production
+    concurrency:
+      group: sintonizados-production
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    env:
+      GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      GOOGLE_CLOUD_REGION: ${{ vars.GCP_REGION }}
+      GIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+    steps:
+      - name: Check out the commit whose CI completed
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Verify successful CI for manual deployments
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          passed="$(gh run list --workflow ci.yml --commit "$DEPLOY_SHA" \
+            --json status,conclusion,event \
+            --jq 'any(.[]; .status == "completed" and .conclusion == "success" and .event == "push")')"
+          test "$passed" = true || {
+            echo "No successful push CI run exists for $DEPLOY_SHA" >&2
+            exit 1
+          }
+
+      - name: Podman baseline
+        run: podman --version
+
+      - name: Authenticate to Google Cloud with GitHub OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          version: '>= 363.0.0'
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Build, publish and deploy the exact commit
+        run: ./scripts/cloud deploy all
+
+      - name: Record deployed revisions
+        run: |
+          {
+            echo '## Sintonizados production deployment'
+            echo
+            echo "Commit: \`$GIT_SHA\`"
+            echo
+            echo '```text'
+            ./scripts/cloud status
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

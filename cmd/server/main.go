@@ -59,7 +59,15 @@ func main() {
 	switch env("DECISION_ENGINE", "deterministic") {
 	case "deterministic":
 	case "laya":
-		decision = laya.LayaDecisionEngine{URL: env("LAYA_URL", "http://sintonizados-laya:8000"), APIKey: os.Getenv("LAYA_API_KEY")}
+		audience := os.Getenv("LAYA_CLOUD_AUDIENCE")
+		var identityTokens laya.IDTokenProvider
+		if audience != "" {
+			identityTokens = &laya.MetadataIDTokenProvider{}
+		}
+		decision = laya.LayaDecisionEngine{
+			URL: env("LAYA_URL", "http://sintonizados-laya:8000"), APIKey: os.Getenv("LAYA_API_KEY"),
+			CloudAudience: audience, IDTokenProvider: identityTokens,
+		}
 	default:
 		slog.Error("DECISION_ENGINE must be deterministic or laya")
 		os.Exit(1)

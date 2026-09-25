@@ -22,8 +22,10 @@
 
 - [ ] Autenticar Google, confirmar modelo/cuotas y validar dos sesiones simultáneas
   con audio real, calidad y latencia: [issue #1](https://github.com/munhof/sintonizados/issues/1).
-- [ ] Desplegar la demo de Cloud Run y comprobar SSE desde un navegador externo:
+- [ ] Validar SSE desde un navegador externo y dos charlas con audio real en Cloud Run:
   [issue #2](https://github.com/munhof/sintonizados/issues/2).
+- [x] Preparar Cloud Run gateway/Laya, Artifact Registry, Secret Manager y GitHub
+  OIDC/WIF con deploy tras CI; smoke cloud valida health público y Laya privado.
 - [x] Publicar cambios y comprobar GitHub Actions remoto: [issue #11](https://github.com/munhof/sintonizados/issues/11), [corrida verify](https://github.com/munhof/sintonizados/actions/runs/36088885768).
 - [x] Prueba de navegador y revisión visual en desktop y móvil.
 - [ ] Auditar teclado/lector de pantalla e incorporar feedback de accesibilidad:
@@ -36,8 +38,10 @@ real con proveedores esté terminada. El modo demo entrega frases programadas.
 
 Ver `docs/operations/verification.md` para comandos/resultados observados. La
 [corrida verify del commit cab5ea6](https://github.com/munhof/sintonizados/actions/runs/36088885768)
-pasó; el despliegue Cloud Run aún no está verificado. Las tareas de aceptación y
-evolución se siguen en los issues enlazados abajo; no equivalen a funcionalidades implementadas.
+pasó. La configuración de despliegue no equivale a aceptación real: quedan por
+comprobar la sesión SSE en navegador externo, dos fuentes simultáneas con audio
+real y su calidad/latencia. Las tareas de aceptación y evolución se siguen en los
+issues enlazados abajo; no equivalen a funcionalidades implementadas.
 
 ## Roadmap
 

@@ -53,6 +53,7 @@ Thumbs.db
 credentials/
 *credentials*.json
 *service-account*.json
+.gha-creds-*.json
 *.pem
 *.key
 /models/

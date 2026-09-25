@@ -26,6 +26,14 @@ El servidor requiere token de operador incluso en demo. Lectura de charlas y
 subtítulos es pública; escritura y métricas exigen bearer. No hay usuarios,
 multi-tenancy, CORS abierto ni credenciales en el navegador.
 
+En Cloud Run, el adapter de Laya puede usar `LAYA_CLOUD_AUDIENCE` para pedir un
+ID token a la metadata server con la identidad runtime ADC. Ese token va en
+`X-Serverless-Authorization`; `Authorization` conserva la clave propia de Laya.
+Sin audience configurado, el desarrollo local mantiene su autenticación actual.
+Si el token no puede obtenerse, el adapter devuelve unavailable y la aplicación
+usa `DeterministicDecisionEngine`; no envía una petición anónima al servicio
+privado.
+
 Los límites actuales son por proceso: 16 sesiones retenidas por default (incluidas
 finalizadas), 200 subtítulos por sesión, 20 transcripts de contexto, 32 chunks en
 cola, 32 eventos por suscriptor y 2 MiB por mensaje de proveedor. No hay limpieza

@@ -66,6 +66,6 @@ case "$command" in
   smithy-build) smithy_tool build; mkdir -p api/generated/openapi; cp api/build/smithy/source/openapi/Sintonizados.openapi.json api/generated/openapi/sintonizados.openapi.json ;;
   openapi) "$0" smithy-build; podman run --rm -v "$root:/workspace:ro,Z" docker.io/library/python:3.13-slim sh -ec 'pip install --quiet --disable-pip-version-check openapi-spec-validator==0.7.2; python -m openapi_spec_validator /workspace/api/generated/openapi/sintonizados.openapi.json' ;;
   docs) printf '%s\n' 'Contexto: docs/project-context.md' 'Arquitectura: docs/architecture/overview.md' 'Contrato: api/smithy/ + api/README.md'; "$0" openapi ;;
-  gcloud) exec podman run --rm -it -v sintonizados-gcloud:/root/.config/gcloud -v "$root:/workspace:Z" -w /workspace gcr.io/google.com/cloudsdktool/google-cloud-cli:stable gcloud "$@" ;;
+  gcloud) exec podman run --rm -i -v sintonizados-gcloud:/root/.config/gcloud -v "$root:/workspace:Z" -w /workspace gcr.io/google.com/cloudsdktool/google-cloud-cli:stable gcloud "$@" ;;
   *) printf '%s\n' 'Usage: ./scripts/dev {build|test|lint|fmt|tidy|run|container|contract|feed|laya-build|laya-start|laya-status|laya-smoke|laya-stop|obs-start|obs-stop|obs-status|obs-feed|smoke|smithy-validate|smithy-build|openapi|docs|gcloud}' ;;
 esac

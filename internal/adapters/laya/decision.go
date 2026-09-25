@@ -5,18 +5,25 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/munhof/sintonizados/internal/domain"
 	"io"
 	"math"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/munhof/sintonizados/internal/domain"
 )
 
+type IDTokenProvider interface {
+	IDToken(context.Context, string) (string, error)
+}
+
 type LayaDecisionEngine struct {
-	URL, APIKey string
-	Client      *http.Client
-	Timeout     time.Duration
+	URL, APIKey     string
+	CloudAudience   string
+	IDTokenProvider IDTokenProvider
+	Client          *http.Client
+	Timeout         time.Duration
 }
 
 func (d LayaDecisionEngine) Decide(ctx context.Context, r domain.DecisionRequest) (domain.DecisionResult, error) {
@@ -49,6 +56,16 @@ func (d LayaDecisionEngine) Decide(ctx context.Context, r domain.DecisionRequest
 	req.Header.Set("Content-Type", "application/json")
 	if d.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+d.APIKey)
+	}
+	if d.CloudAudience != "" {
+		if d.IDTokenProvider == nil {
+			return domain.DecisionResult{}, domain.ErrUnavailable
+		}
+		token, err := d.IDTokenProvider.IDToken(ctx, d.CloudAudience)
+		if err != nil || token == "" {
+			return domain.DecisionResult{}, domain.ErrUnavailable
+		}
+		req.Header.Set("X-Serverless-Authorization", "Bearer "+token)
 	}
 	client := d.Client
 	if client == nil {

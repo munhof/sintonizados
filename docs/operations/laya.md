@@ -98,3 +98,25 @@ automatismo por sesión. Repetir la prueba después de cambiar el checkpoint o
 plantilla; mejorar calidad requiere corpus etiquetado y medir por clase (confusión,
 recall y latencia), no ajustar frases de demostración. No se validó aún Google real
 con esta nueva ruta ni captura en vivo tras el cambio.
+
+## Cloud Run
+
+En Google Cloud Laya se ejecuta como `sintonizados-laya` privado, separado del
+gateway Go. Configuración inicial: CPU, 2 vCPU, 4 GiB, concurrency 2, `min=1`,
+`max=1`, CPU siempre asignada, `LAYA_THREADS=2`, multilingual precargado y bearer
+`LAYA_API_KEY` desde Secret Manager. No recibe claves Gemini ni Translation.
+
+La llamada del gateway adjunta un ID token de Cloud Run, con audiencia igual a la
+URL Laya, mediante `X-Serverless-Authorization`; también adjunta el bearer Laya en
+`Authorization`. El token ID proviene del metadata server y se cachea hasta un
+minuto antes de expirar. En local `LAYA_CLOUD_AUDIENCE` queda vacío y se conserva
+el comportamiento Podman documentado arriba.
+
+El model card oficial identifica licencia Apache 2.0; el archivo multilingual
+`model.safetensors` tiene 644 MB. Se decidió mantener la descarga a startup y
+guardar los pesos en la capa writable efímera de Cloud Run, sin añadirlos a la
+imagen OCI. Cloud Run mantiene una instancia mínima activa; el CD registra el
+tiempo desde deploy hasta health con el modelo cargado. La revisión de la
+aplicación Laya está fijada pero la descarga no fuerza el snapshot de pesos; el
+SHA observado `55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851` no es un lock aplicado a
+un cache vacío. La respuesta `/health` valida carga, no exactitud lingüística.
